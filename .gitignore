@@ -1,0 +1,40 @@
+# Local environments and secrets
+.venv/
+venv/
+**/.env
+**/.env.*
+!**/.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local databases and object data
+*.db
+*.db-shm
+*.db-wal
+.docker-data/
+.runtime/
+apps/api/data/assets/
+
+# Frontend
+node_modules/
+.next/
+out/
+npm-debug.log*
+
+# Generated and temporary assets
+output/
+tmp/
+temp/
+*.tmp
+*.onnx
+
+# Editors and OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
