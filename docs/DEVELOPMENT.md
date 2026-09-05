@@ -100,6 +100,21 @@ postgresql+psycopg://commerce:commerce_dev@localhost:5432/commerce
 
 `STORAGE_BACKEND=s3` 时，写入会保留本地镜像，并尽力上传远端；远端读取失败会回退到本地副本。
 
+### 当前腾讯云 COS 配置
+
+当前生产素材链路使用新腾讯云账号：
+
+```text
+S3_ENDPOINT_URL=https://cos.ap-guangzhou.myqcloud.com
+S3_BUCKET=flow-commerce-assets-1480282320
+S3_REGION=ap-guangzhou
+PUBLIC_ASSET_BASE_URL=https://img.yyjds.site
+```
+
+`S3_ACCESS_KEY` 和 `S3_SECRET_KEY` 只保存在根目录 `.env`，不得写入文档或提交。COS 桶为私有读写，CDN 已获得只读回源权限。当前不迁移旧桶 `flow-commerce-assets-1466961418` 的历史对象，因此旧对象路径不保证在新链路中可用。
+
+配置于 2026-09-04 完成受控验证：项目存储实现可以上传并读回新对象，公开 CDN 地址返回 `200` 且内容一致，验证对象随后已删除。日常排错必须使用实际对象 URL；根域名返回 `403` 可能只是私有桶不存在可公开读取的根对象。
+
 ### 图片 Provider
 
 | 变量 | 用途 |

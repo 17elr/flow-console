@@ -316,6 +316,16 @@ def import_finished_package(db: Session, workbook_content: bytes, uploads: list[
             db.flush()
             sku_map[sku_code.casefold()] = sku
 
+        # A fresh finished-image import defines the current sellable SKU set.
+        # Retain historical rows for draft references, but exclude removed SKUs
+        # from image-count checks and future marketplace payloads.
+        current_sku_ids = {sku.id for sku in sku_map.values()}
+        existing_skus = db.scalars(
+            select(SkuVariant).where(SkuVariant.product_id == product.id)
+        ).all()
+        for existing_sku in existing_skus:
+            existing_sku.is_sellable = existing_sku.id in current_sku_ids
+
         if rows:
             product.price = next((sku.price for sku in sku_map.values() if sku.price), 0)
             product.stock = sum(sku.stock for sku in sku_map.values())

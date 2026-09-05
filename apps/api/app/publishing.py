@@ -125,7 +125,7 @@ def build_listing_workbook(db: Session, product: ProductMaster, store: Store) ->
     sku_sheet.append(["SKU", "SKU Name", "Color", "Size", "Set Quantity", "Price", "Stock", "Image File"])
     for sku in product.skus:
         asset = sku_assets.get(sku.id)
-        image_name = f"images/sku/{sku.sku_code}.png" if asset else ""
+        image_name = f"产品图片/{product.spu_code}/SKU图/{sku.sku_code}.png" if asset else ""
         sku_sheet.append([sku.sku_code, sku_names.get(str(sku.id), sku.sku_code), sku.color, sku.size, sku.quantity, round(((sku.price or product.price) or 0) * multiplier, 2), sku.stock, image_name])
         sku_sheet.cell(sku_sheet.max_row, 6).number_format = '"$"#,##0.00'
     _style_sheet(sku_sheet, [22, 28, 16, 16, 14, 12, 12, 42])
@@ -139,12 +139,12 @@ def build_listing_workbook(db: Session, product: ProductMaster, store: Store) ->
     for role in [*OUTPUT_ROLES, *SCENE_ROLES]:
         asset = latest_assets.get((role, None))
         if asset:
-            image_sheet.append([role, "", f"images/main/{role}.png", asset.width, asset.height, asset.sha256])
+            image_sheet.append([role, "", f"产品图片/{product.spu_code}/产品主图/{role}.png", asset.width, asset.height, asset.sha256])
     for sku in product.skus:
         link = sku_assets.get(sku.id)
         if link:
             asset = db.get(AssetVersion, link.asset_version_id)
-            image_sheet.append(["SKU_WHITE", sku.sku_code, f"images/sku/{sku.sku_code}.png", asset.width, asset.height, asset.sha256])
+            image_sheet.append(["SKU_WHITE", sku.sku_code, f"产品图片/{product.spu_code}/SKU图/{sku.sku_code}.png", asset.width, asset.height, asset.sha256])
     _style_sheet(image_sheet, [24, 22, 42, 10, 10, 66])
 
     parameter_sheet = workbook.create_sheet("Category Parameters")
@@ -152,7 +152,7 @@ def build_listing_workbook(db: Session, product: ProductMaster, store: Store) ->
     parameters = json.loads(product.import_parameters_json or "{}")
     packaging = _packaging_preset(db, product)
     if packaging:
-        parameters["外包装图片"] = f"images/packaging/包装图{packaging.slot}.{packaging.mime_type.split('/')[-1].replace('jpeg', 'jpg')}"
+        parameters["外包装图片"] = f"产品图片/{product.spu_code}/尺寸图表/包装图{packaging.slot}.{packaging.mime_type.split('/')[-1].replace('jpeg', 'jpg')}"
     for key, value in parameters.items():
         parameter_sheet.append([key, "" if value is None else value])
     _style_sheet(parameter_sheet, [46, 70])
@@ -219,12 +219,16 @@ def build_aliexpress_workbook(db: Session, product: ProductMaster, store: Store)
     skus = workbook.create_sheet("销售属性_SKU")
     skus.append(["平台SKU", "商品SPU", "金属颜色", "自定义名称", "售价", "库存", "重量(kg)", "长度(cm)", "宽度(cm)", "高度(cm)", "特殊商品类型", "物流属性", "是否申请停售", "图片文件"])
     for item in product.skus:
-        skus.append([item.sku_code, product.spu_code, item.color or "", sku_names.get(str(item.id), item.name or item.sku_code), round(((item.price or product.price) or 0) * multiplier, 2), item.stock, round((product.weight_g or 10) / 1000, 3), 10, 10, 2, parameters.get("特殊商品类型", "普货"), parameters.get("物流属性", "普货"), "否", f"images/sku/{item.sku_code}.png"])
+        skus.append([item.sku_code, product.spu_code, item.color or "", sku_names.get(str(item.id), item.name or item.sku_code), round(((item.price or product.price) or 0) * multiplier, 2), item.stock, round((product.weight_g or 10) / 1000, 3), 10, 10, 2, parameters.get("特殊商品类型", "普货"), parameters.get("物流属性", "普货"), "否", f"产品图片/{product.spu_code}/SKU图/{item.sku_code}.png"])
     _style_sheet(skus, [24, 18, 18, 32, 12, 10, 14, 14, 14, 14, 16, 20, 14, 42])
     images = workbook.create_sheet("产品图片")
     images.append(["图片用途", "图片文件", "是否必需"])
     for role in OUTPUT_ROLES:
-        images.append([role, f"images/main/{role}.png", "是"])
+        images.append([role, f"产品图片/{product.spu_code}/产品主图/{role}.png", "是"])
+    packaging = _packaging_preset(db, product)
+    if packaging:
+        extension = packaging.mime_type.split("/")[-1].replace("jpeg", "jpg")
+        images.append(["包装图", f"产品图片/{product.spu_code}/尺寸图表/包装图{packaging.slot}.{extension}", "否"])
     _style_sheet(images, [28, 52, 12])
     instructions = workbook.create_sheet("使用说明")
     instructions.append(["步骤", "说明"])
@@ -252,21 +256,124 @@ def listing_package(db: Session, product: ProductMaster, store: Store) -> tuple[
     sku_assets = _latest_sku_assets(db, product)
     with zipfile.ZipFile(stream, "w", zipfile.ZIP_DEFLATED) as archive:
         workbook = build_aliexpress_workbook(db, product, store) if platform_key(store) == "ALIEXPRESS" else build_listing_workbook(db, product, store)
-        archive.writestr("listing-import.xlsx", workbook)
+        root = "本地导入素材/"
+        archive.writestr(f"{root}产品导入表格.xlsx", workbook)
         packaging = _packaging_preset(db, product)
         if packaging:
             extension = packaging.mime_type.split("/")[-1].replace("jpeg", "jpg")
-            archive.writestr(f"images/packaging/包装图{packaging.slot}.{extension}", configured_storage().get(packaging.storage_key))
+            try:
+                packaging_content = configured_storage().get(packaging.storage_key)
+            except FileNotFoundError:
+                # Packaging is optional for Miaoshou local-material imports. A
+                # stale preset record must not block the complete product pack.
+                packaging_content = None
+            if packaging_content:
+                archive.writestr(f"{root}产品图片/{product.spu_code}/尺寸图表/包装图{packaging.slot}.{extension}", packaging_content)
         for asset in db.scalars(select(AssetVersion).where(AssetVersion.product_id == product.id, AssetVersion.role.in_([*OUTPUT_ROLES, *SCENE_ROLES])).order_by(AssetVersion.created_at.desc())).all():
-            name = f"images/main/{asset.role}.png"
+            name = f"{root}产品图片/{product.spu_code}/产品主图/{asset.role}.png"
             if name not in archive.namelist():
                 archive.writestr(name, configured_storage().get(asset.storage_key))
         for sku in product.skus:
             link = sku_assets.get(sku.id)
             if link:
                 asset = db.get(AssetVersion, link.asset_version_id)
-                archive.writestr(f"images/sku/{sku.sku_code}.png", configured_storage().get(asset.storage_key))
+                archive.writestr(f"{root}产品图片/{product.spu_code}/SKU图/{sku.sku_code}.png", configured_storage().get(asset.storage_key))
     return stream.getvalue(), f"{product.spu_code}-{store.platform.lower()}-import.zip"
+
+
+def create_aliexpress_import_packages(
+    db: Session,
+    product: ProductMaster,
+    state: dict,
+    store_ids: list[int],
+    *,
+    force: bool = False,
+) -> list[dict]:
+    """Create local AliExpress import packages without calling any platform API."""
+    results: list[dict] = []
+    for store_id in store_ids:
+        store = db.get(Store, store_id)
+        if not store or not store.active:
+            results.append({"store_id": store_id, "status": "FAILED", "error": "店铺不存在或已停用"})
+            continue
+        if platform_key(store) != "ALIEXPRESS":
+            results.append({"store_id": store.id, "status": "FAILED", "error": "导入包只能为速卖通店铺生成"})
+            continue
+        copy = next((item for item in product.listing_copies if item.platform == "ALIEXPRESS"), None)
+        if not copy or copy.status != "REVIEWED":
+            results.append({"store_id": store.id, "status": "FAILED", "error": "请先确认速卖通英文文案"})
+            continue
+
+        key = f"{publishing_key(db, product, store, state, auto_publish=False)}:manual-import"
+        draft = db.scalar(select(MiaoshouDraft).where(MiaoshouDraft.idempotency_key == key))
+        if draft and draft.status == "PACKAGE_READY" and draft.package_key and not force:
+            results.append({
+                "store_id": store.id,
+                "status": "PACKAGE_READY",
+                "draft_id": draft.id,
+                "package_available": True,
+                "idempotent": True,
+            })
+            continue
+        if not draft:
+            draft = MiaoshouDraft(
+                product_id=product.id,
+                store_id=store.id,
+                idempotency_key=key,
+                channel="ALIEXPRESS",
+                status="PENDING",
+                attempt_count=1,
+            )
+            db.add(draft)
+            db.flush()
+        else:
+            draft.status = "PENDING"
+            draft.error_message = None
+            draft.attempt_count = (draft.attempt_count or 0) + 1
+
+        try:
+            package, filename = listing_package(db, product, store)
+            package_key = f"publish/{product.spu_code}/{store.id}/{key[:16]}-{filename}"
+            configured_storage().put(package_key, package, "application/zip")
+            draft.status = "PACKAGE_READY"
+            draft.external_id = None
+            draft.package_key = package_key
+            draft.error_message = None
+            draft.response_json = json.dumps(
+                {"mode": "manual_import", "filename": filename, "byte_size": len(package)},
+                ensure_ascii=False,
+            )
+            listing = db.scalar(
+                select(StoreListing).where(
+                    StoreListing.product_id == product.id,
+                    StoreListing.store_id == store.id,
+                )
+            )
+            if not listing:
+                listing = StoreListing(
+                    product_id=product.id,
+                    store_id=store.id,
+                    listing_title=product.title,
+                    price=product.price,
+                    status="PACKAGE_READY",
+                )
+                db.add(listing)
+            elif not listing.external_product_id:
+                listing.status = "PACKAGE_READY"
+                listing.response_json = draft.response_json
+            results.append({
+                "store_id": store.id,
+                "status": "PACKAGE_READY",
+                "draft_id": draft.id,
+                "package_available": True,
+                "idempotent": False,
+            })
+        except (OSError, ValueError) as exc:
+            draft.status = "FAILED"
+            draft.error_message = str(exc)
+            results.append({"store_id": store.id, "status": "FAILED", "draft_id": draft.id, "error": str(exc)})
+    db.commit()
+    return results
 
 
 def publishing_key(db: Session, product: ProductMaster, store: Store, state: dict, *, auto_publish: bool = False) -> str:

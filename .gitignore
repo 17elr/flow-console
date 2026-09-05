@@ -25,6 +25,8 @@ node_modules/
 .next/
 out/
 npm-debug.log*
+install.log
+system-diagnostic-*.log
 
 # Generated and temporary assets
 output/

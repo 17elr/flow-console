@@ -13,6 +13,7 @@ from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, UploadFi
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, StreamingResponse
 from sqlalchemy import delete, func, or_, select
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, selectinload
 
 from .db import Base, SessionLocal, engine, get_db
@@ -61,14 +62,14 @@ from .schemas import (
     SkuOut,
     SkuPatch,
     StoreOut,
-    SceneBatchCreate, SceneProfileOut, ProviderStatusOut, SimpleProductCreate, GenerateAllCreate, MiaoshouDraftCreate, ListingCopyUpdate, ReviewDecisionCreate, AutomationScheduleCreate, AutomationSchedulePatch, StoreAutomationPatch, AutomationRunCreate, PackagingSelectionPatch, PackagingBulkPatch, FinishedDraftRetryCreate,
+    SceneBatchCreate, SceneProfileOut, ProviderStatusOut, SimpleProductCreate, GenerateAllCreate, MiaoshouDraftCreate, AliExpressImportPackageCreate, ListingCopyUpdate, ReviewDecisionCreate, AutomationScheduleCreate, AutomationSchedulePatch, StoreAutomationPatch, AutomationRunCreate, PackagingSelectionPatch, PackagingBulkPatch, FinishedDraftRetryCreate,
 )
 from .scene_pipeline import DEFAULT_SCENE_TEMPLATE, SCENE_PIPELINE_VERSION, SCENE_ROLES, choose_sku, ensure_birefnet_model, scene_fingerprint, scene_readiness, profile_values
 from .simple_workflow import create_all_batches, workflow_payload
 from .miaoshou import configured_miaoshou
 from .copywriting import copy_payload, update_copy, upsert_generated_copy
 from .reviews import save_image_decision, save_product_decision
-from .publishing import create_store_drafts
+from .publishing import create_aliexpress_import_packages, create_store_drafts
 from .automation import automation_scheduler, recover_interrupted_runs, run_automation, run_payload, schedule_payload
 from .finished_import import import_finished_package
 
@@ -429,6 +430,36 @@ def delete_product(product_id: int, db: Session = Depends(get_db)) -> dict:
     }
 
 
+@app.post("/api/products/bulk-delete")
+def bulk_delete_products(payload: dict, db: Session = Depends(get_db)) -> dict:
+    """Delete selected local products; external marketplace records remain untouched."""
+    ids = list(dict.fromkeys(int(value) for value in (payload.get("product_ids") or [])))
+    if not ids:
+        raise HTTPException(status_code=400, detail="请选择要删除的商品")
+    deleted = []
+    for product_id in ids:
+        product = db.scalar(select(ProductMaster).where(ProductMaster.id == product_id))
+        if product is None:
+            continue
+        # Reuse the same dependency-safe cleanup as the single-delete path.
+        sku_ids = list(db.scalars(select(SkuVariant.id).where(SkuVariant.product_id == product_id)).all())
+        batch_ids = list(db.scalars(select(ImageBatch.id).where(ImageBatch.product_id == product_id)).all())
+        if sku_ids:
+            db.execute(delete(SkuAsset).where(SkuAsset.sku_id.in_(sku_ids)))
+            db.execute(delete(SkuComponent).where(SkuComponent.sku_id.in_(sku_ids)))
+        if batch_ids:
+            db.execute(delete(ImageJob).where(ImageJob.batch_id.in_(batch_ids)))
+            db.execute(delete(AssetVersion).where(AssetVersion.batch_id.in_(batch_ids)))
+        for model, column in [(ImageJob, ImageJob.product_id), (AssetVersion, AssetVersion.product_id), (ImageBatch, ImageBatch.product_id), (ProductPackagingSelection, ProductPackagingSelection.product_id), (MiaoshouDraft, MiaoshouDraft.product_id), (StoreListing, StoreListing.product_id), (ListingCopy, ListingCopy.product_id), (ReviewDecision, ReviewDecision.product_id), (SceneProfile, SceneProfile.product_id), (Asset, Asset.product_id)]:
+            db.execute(delete(model).where(column == product_id))
+        if sku_ids:
+            db.execute(delete(SkuVariant).where(SkuVariant.id.in_(sku_ids)))
+        db.delete(product)
+        deleted.append(product_id)
+    db.commit()
+    return {"deleted": True, "product_ids": deleted}
+
+
 @app.post("/api/simple-products")
 def save_simple_product(payload: SimpleProductCreate, db: Session = Depends(get_db)) -> dict:
     product = db.scalar(select(ProductMaster).where(ProductMaster.spu_code == payload.spu_code.strip()))
@@ -458,7 +489,16 @@ def generate_listing_copies(product_id: int, db: Session = Depends(get_db)) -> d
     product = load_product(db, product_id)
     for platform in ("TEMU", "ALIEXPRESS"):
         upsert_generated_copy(db, product, platform)
-    db.commit()
+    for attempt in range(3):
+        try:
+            db.commit()
+            break
+        except OperationalError as exc:
+            if "database is locked" not in str(exc).lower() or attempt == 2:
+                raise
+            db.rollback()
+            import time
+            time.sleep(0.75 * (attempt + 1))
     db.expire_all()
     return workflow_payload(db, load_product(db, product_id))
 
@@ -605,7 +645,7 @@ def miaoshou_category_rules(cid: str) -> dict:
 
 
 @app.post("/api/miaoshou/stores/sync")
-def sync_miaoshou_stores(mode: str = Query(default="SEMI", pattern="^(SEMI|FULL)$"), db: Session = Depends(get_db)) -> dict:
+def sync_miaoshou_stores(mode: str = Query(default="SEMI", pattern="^(SEMI|FULL|ALIEXPRESS)$"), db: Session = Depends(get_db)) -> dict:
     provider = configured_miaoshou()
     try:
         response = provider.list_shops(mode)
@@ -629,7 +669,7 @@ def sync_miaoshou_stores(mode: str = Query(default="SEMI", pattern="^(SEMI|FULL)
             continue
         external_id = str(external_id)
         raw_platform = str(item.get("platform") or item.get("platformCode") or item.get("site") or "").upper()
-        is_aliexpress = "ALI" in raw_platform or "速卖通" in raw_platform
+        is_aliexpress = mode == "ALIEXPRESS" or "ALI" in raw_platform or "速卖通" in raw_platform
         store = db.scalar(select(Store).where(Store.external_shop_id == external_id))
         if not store:
             store = Store(name=str(name), platform="ALIEXPRESS" if is_aliexpress else "TEMU", mode="POP" if is_aliexpress else ("半托管" if mode == "SEMI" else "全托管"), currency="USD")
@@ -640,7 +680,7 @@ def sync_miaoshou_stores(mode: str = Query(default="SEMI", pattern="^(SEMI|FULL)
             store.mode = "POP"
         store.external_shop_id = external_id
         store.active = True
-        synced.append({"name": store.name, "external_shop_id": external_id, "mode": store.mode})
+        synced.append({"name": store.name, "external_shop_id": external_id, "platform": store.platform, "mode": store.mode})
     db.commit()
     return {"mode": mode, "count": len(synced), "stores": synced, "request_id": response.get("request_id")}
 
@@ -772,6 +812,29 @@ def create_miaoshou_drafts(product_id: int, payload: MiaoshouDraftCreate, db: Se
     if not payload.confirmed_review: raise HTTPException(status_code=409, detail="请先人工查看并确认全部生成图片")
     if not state["review"]["approved"]: raise HTTPException(status_code=409, detail="请先完成整款人工审核")
     return {"results": create_store_drafts(db, product, state, payload.store_ids, force=payload.force, auto_publish=payload.auto_publish)}
+
+
+@app.post("/api/products/{product_id}/aliexpress-import-package")
+def create_aliexpress_import_package(product_id: int, payload: AliExpressImportPackageCreate, db: Session = Depends(get_db)) -> dict:
+    product = load_product(db, product_id)
+    state = workflow_payload(db, product)
+    if state["status"] != "READY_TO_PUBLISH":
+        raise HTTPException(status_code=409, detail="请先补齐并检查全部生成图片")
+    if state.get("publish_blockers"):
+        raise HTTPException(status_code=409, detail="；".join(state["publish_blockers"]))
+    if not payload.confirmed_review:
+        raise HTTPException(status_code=409, detail="请先人工查看并确认全部生成图片")
+    if not state["review"]["approved"]:
+        raise HTTPException(status_code=409, detail="请先完成整款人工审核")
+    return {
+        "results": create_aliexpress_import_packages(
+            db,
+            product,
+            state,
+            payload.store_ids,
+            force=payload.force,
+        )
+    }
 
 
 @app.get("/api/miaoshou-drafts/{draft_id}/package")
@@ -1295,7 +1358,16 @@ def _ensure_finished_review_ready(db: Session, product: ProductMaster, state: di
         asset_row = db.get(AssetVersion, asset["id"])
         if asset_row:
             save_image_decision(db, asset_row, "APPROVED", "成品图导入后自动确认")
-    db.commit()
+    for attempt in range(3):
+        try:
+            db.commit()
+            break
+        except OperationalError as exc:
+            if "database is locked" not in str(exc).lower() or attempt == 2:
+                raise
+            db.rollback()
+            import time
+            time.sleep(0.75 * (attempt + 1))
     db.expire_all()
 
     refreshed = workflow_payload(db, load_product(db, product.id))

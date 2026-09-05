@@ -326,6 +326,12 @@ class MiaoshouDraftCreate(BaseModel):
     auto_publish: bool = False
 
 
+class AliExpressImportPackageCreate(BaseModel):
+    store_ids: List[int]
+    confirmed_review: bool = False
+    force: bool = False
+
+
 class PackagingSelectionPatch(BaseModel):
     preset_id: int
 

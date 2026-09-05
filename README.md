@@ -13,6 +13,7 @@
 - 妙手店铺同步、TEMU 草稿/发布闭环、AliExpress 草稿与 ZIP 导入包。
 - 手动运行和按时区调度的批量自动化，保留请求、外部 ID 和状态证据。
 - SQLite 本地开发；可切换 PostgreSQL、Redis/Celery 和 S3 兼容存储。
+- 当前素材存储已切换到新腾讯云 COS 桶 `flow-commerce-assets-1480282320`，公开地址仍为 `https://img.yyjds.site`；旧 COS 历史文件不迁移。
 
 ## 技术栈
 

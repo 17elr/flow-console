@@ -131,6 +131,11 @@ class MiaoshouProvider:
         return {"request_id": request_id, "data": data.get("data"), "response": data}
 
     def list_shops(self, mode: str, page_no: int = 1, page_size: int = 100) -> dict[str, Any]:
+        if mode.upper() in {"ALIEXPRESS", "AE", "速卖通"}:
+            return self.request(
+                self.SHOP_LIST_PATH,
+                {"platform": "aliexpress", "site": "ALIEXPRESS", "pageNo": page_no, "pageSize": page_size},
+            )
         semi = mode.upper() in {"SEMI", "HALF", "PDDKJCHOICE", "半托管"}
         return self.request(
             self.SHOP_LIST_PATH,

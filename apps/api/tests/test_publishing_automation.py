@@ -4,14 +4,14 @@ import io
 import zipfile
 
 from openpyxl import load_workbook
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 from app.automation import recover_interrupted_runs, run_automation
 from app.db import Base
 from app.models import AutomationRun, ListingCopy, MiaoshouDraft, PackagingPreset, ProductMaster, ProductPackagingSelection, SkuVariant, Store, StoreAutomationConfig, StoreListing
-from app.publishing import build_listing_workbook, create_store_drafts, listing_package
+from app.publishing import build_listing_workbook, create_aliexpress_import_packages, create_store_drafts, listing_package
 
 
 def setup_product(session: Session) -> tuple[ProductMaster, Store]:
@@ -109,10 +109,45 @@ def test_listing_package_contains_selected_packaging_image(monkeypatch) -> None:
         session.add(ProductPackagingSelection(product_id=product.id, preset_id=preset.id)); session.commit()
         package, _ = listing_package(session, product, store)
         with zipfile.ZipFile(io.BytesIO(package)) as archive:
-            assert "images/packaging/包装图1.png" in archive.namelist()
-            workbook = load_workbook(io.BytesIO(archive.read("listing-import.xlsx")))
-            parameters = dict(workbook["Category Parameters"].iter_rows(min_row=2, values_only=True))
-            assert parameters["外包装图片"] == "images/packaging/包装图1.png"
+            workbook_path = "本地导入素材/产品导入表格.xlsx"
+            packaging_path = "本地导入素材/产品图片/PUB-001/尺寸图表/包装图1.png"
+            assert workbook_path in archive.namelist()
+            assert packaging_path in archive.namelist()
+            workbook = load_workbook(io.BytesIO(archive.read(workbook_path)))
+            values = [cell.value for sheet in workbook.worksheets for row in sheet.iter_rows() for cell in row]
+            assert "产品图片/PUB-001/尺寸图表/包装图1.png" in values
+
+
+def test_aliexpress_import_package_is_local_and_idempotent(monkeypatch) -> None:
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(engine)
+
+    class Storage:
+        def __init__(self):
+            self.items = {}
+
+        def get(self, key: str) -> bytes:
+            return self.items[key]
+
+        def put(self, key: str, content: bytes, _content_type: str) -> None:
+            self.items[key] = content
+
+    storage = Storage()
+    monkeypatch.setattr("app.publishing.configured_storage", lambda: storage)
+    with Session(engine) as session:
+        product, store = setup_product(session)
+        state = {"review": {"fingerprint": "approved"}}
+        result = create_aliexpress_import_packages(session, product, state, [store.id])
+        assert result[0]["status"] == "PACKAGE_READY"
+        assert result[0]["package_available"] is True
+        draft = session.scalar(select(MiaoshouDraft).where(MiaoshouDraft.store_id == store.id))
+        assert draft is not None and draft.package_key
+        with zipfile.ZipFile(io.BytesIO(storage.get(draft.package_key))) as archive:
+            workbook_path = "本地导入素材/产品导入表格.xlsx"
+            assert workbook_path in archive.namelist()
+            assert load_workbook(io.BytesIO(archive.read(workbook_path))).sheetnames == ["商品参数与属性", "销售属性_SKU", "产品图片", "使用说明"]
+        again = create_aliexpress_import_packages(session, product, state, [store.id])
+        assert again[0]["idempotent"] is True
 
 
 def test_historical_published_record_is_downgraded_until_miaoshou_verifies(monkeypatch) -> None:

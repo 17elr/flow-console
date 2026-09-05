@@ -129,8 +129,9 @@ export function AutomationConsole() {
       const results = await Promise.all([
         api<{ count: number }>("/api/miaoshou/stores/sync?mode=SEMI", { method: "POST" }),
         api<{ count: number }>("/api/miaoshou/stores/sync?mode=FULL", { method: "POST" }),
+        api<{ count: number }>("/api/miaoshou/stores/sync?mode=ALIEXPRESS", { method: "POST" }),
       ]);
-      setNotice(`已同步妙手店铺 ${results[0].count + results[1].count} 条记录`);
+      setNotice(`已同步妙手店铺 ${results.reduce((total, result) => total + result.count, 0)} 条记录`);
       await load();
     } catch (error) { setNotice(error instanceof Error ? error.message : "同步妙手店铺失败"); }
     finally { setBusy(""); }

@@ -145,6 +145,7 @@ const statuses: Record<string, string> = {
 export function SimpleWorkbench() {
   const [products, setProducts] = useState<ProductSummary[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selectedProductIds, setSelectedProductIds] = useState<number[]>([]);
   const [flow, setFlow] = useState<Workflow | null>(null);
   const [busy, setBusy] = useState("");
   const [notice, setNotice] = useState("");
@@ -240,6 +241,17 @@ export function SimpleWorkbench() {
       });
       setFlow(null);
       setNotice(result.external_drafts_preserved > 0 ? `商品已删除；${result.external_drafts_preserved} 个外部草稿未远程删除` : "商品已删除");
+    } catch (e) { tell(e); } finally { setBusy(""); }
+  }
+  async function deleteMarkedProducts() {
+    if (!selectedProductIds.length) return;
+    if (!window.confirm(`确定删除选中的 ${selectedProductIds.length} 款商品吗？\n\n只删除 Flow Console 本地资料，不会远程删除妙手草稿。`)) return;
+    setBusy("bulk-delete");
+    try {
+      const result = await api<{ product_ids: number[] }>("/api/products/bulk-delete", { method: "POST", body: JSON.stringify({ product_ids: selectedProductIds }) });
+      setSelectedProductIds([]);
+      await loadProducts();
+      setNotice(`已删除 ${result.product_ids.length} 款本地商品`);
     } catch (e) { tell(e); } finally { setBusy(""); }
   }
 
@@ -408,6 +420,37 @@ export function SimpleWorkbench() {
       setBusy("");
     }
   }
+  async function createAliExpressPackage() {
+    if (!flow || !shops.length) return setNotice("请至少选择一个速卖通店铺");
+    if (flow.publish_blockers.length) return setNotice(flow.publish_blockers.join("；"));
+    if (!flow.review.approved) return setNotice("请先完成整款人工审核");
+    setBusy("aliexpress-package");
+    try {
+      const response = await api<{ results: DraftResult[] }>(
+        `/api/products/${flow.product.id}/aliexpress-import-package`,
+        {
+          method: "POST",
+          body: JSON.stringify({ store_ids: shops, confirmed_review: true }),
+        },
+      );
+      await loadFlow(flow.product.id);
+      const failures = response.results.filter((item) => item.status === "FAILED");
+      const ready = response.results.filter((item) => item.status === "PACKAGE_READY");
+      if (failures.length) {
+        const messages = failures.map((item) => {
+          const shop = flow.stores.find((candidate) => candidate.store_id === item.store_id);
+          return `${shop?.name ?? `店铺 ${item.store_id}`}：${item.error || "生成导入包失败"}`;
+        });
+        setNotice(messages.join("；"));
+      } else if (ready.length) {
+        setNotice(`${ready.length} 个速卖通导入包已生成，请在结果区域下载`);
+      }
+    } catch (e) {
+      tell(e);
+    } finally {
+      setBusy("");
+    }
+  }
   async function reviewImage(
     output: Output,
     decision: "APPROVED" | "REJECTED",
@@ -568,10 +611,18 @@ export function SimpleWorkbench() {
             <option value="">+ 新建商品</option>
             {products.map((p) => (
               <option key={p.id} value={p.id}>
-                {p.spu_code} · {p.title}
+                {p.spu_code}
               </option>
             ))}
           </select>
+          <details className="simple-bulk-delete">
+            <summary>批量删除</summary>
+            <div className="simple-bulk-menu">
+              <label><input type="checkbox" checked={products.length > 0 && selectedProductIds.length === products.length} onChange={(event) => setSelectedProductIds(event.target.checked ? products.map((item) => item.id) : [])} />全部选择</label>
+              {products.map((product) => <label key={product.id}><input type="checkbox" checked={selectedProductIds.includes(product.id)} onChange={(event) => setSelectedProductIds((items) => event.target.checked ? [...items, product.id] : items.filter((id) => id !== product.id))} />{product.spu_code}</label>)}
+              <button type="button" className="danger-command" disabled={!selectedProductIds.length || busy === "bulk-delete"} onClick={() => void deleteMarkedProducts()}>{busy === "bulk-delete" ? "删除中…" : `删除已选 (${selectedProductIds.length})`}</button>
+            </div>
+          </details>
           {selectedId ? (
             <button className="simple-danger-icon" title="删除当前商品" aria-label="删除当前商品" disabled={busy === "delete"} onClick={deleteSelectedProduct}>
               {busy === "delete" ? <LoaderCircle size={16} className="spin" /> : <Trash2 size={16} />}
@@ -1001,12 +1052,12 @@ export function SimpleWorkbench() {
             <section className="simple-section">
               <Heading
                 number="6"
-                title="选择店铺并创建草稿"
-                text="选择平台后创建对应的妙手商品草稿"
+                title={draftPlatform === "ALIEXPRESS" ? "选择速卖通店铺并生成导入包" : "选择店铺并创建草稿"}
+                text={draftPlatform === "ALIEXPRESS" ? "生成 Excel 和图片 ZIP，导入妙手后手工核对并保存" : "选择平台后创建对应的妙手商品草稿"}
               />
               <div className="draft-platform-tabs" role="tablist" aria-label="草稿平台">
                 <button type="button" className={draftPlatform === "TEMU" ? "active" : ""} onClick={() => chooseDraftPlatform("TEMU")}>TEMU 草稿</button>
-                <button type="button" className={draftPlatform === "ALIEXPRESS" ? "active" : ""} onClick={() => chooseDraftPlatform("ALIEXPRESS")}>速卖通草稿</button>
+                <button type="button" className={draftPlatform === "ALIEXPRESS" ? "active" : ""} onClick={() => chooseDraftPlatform("ALIEXPRESS")}>速卖通导入包</button>
               </div>
               <div className="store-list">
                 {draftShops.map((shop) => (
@@ -1035,24 +1086,42 @@ export function SimpleWorkbench() {
                   </label>
                 ))}
               </div>
-              <button
-                className="primary-command draft-command"
-                disabled={
-                  flow.status !== "READY_TO_PUBLISH" ||
-                  !flow.review.approved ||
-                  !shops.length ||
-                  !selectedCopiesReady ||
-                  busy === "draft"
-                }
-                onClick={createDrafts}
-              >
-                {busy === "draft" ? (
-                  <LoaderCircle className="spin" size={16} />
-                ) : (
-                  <Store size={16} />
-                )}
-                {busy === "draft" ? "妙手处理中" : "创建草稿"}
-              </button>
+              {!draftShops.length && (
+                <p className="draft-note">
+                  暂无已同步的速卖通店铺，请先在高级管理中同步妙手店铺授权。
+                </p>
+              )}
+              {draftPlatform === "ALIEXPRESS" ? (
+                <button
+                  className="primary-command draft-command"
+                  disabled={
+                    flow.status !== "READY_TO_PUBLISH" ||
+                    !flow.review.approved ||
+                    !shops.length ||
+                    !selectedCopiesReady ||
+                    busy === "aliexpress-package"
+                  }
+                  onClick={createAliExpressPackage}
+                >
+                  {busy === "aliexpress-package" ? <LoaderCircle className="spin" size={16} /> : <Download size={16} />}
+                  {busy === "aliexpress-package" ? "正在生成导入包" : "生成导入包"}
+                </button>
+              ) : (
+                <button
+                  className="primary-command draft-command"
+                  disabled={
+                    flow.status !== "READY_TO_PUBLISH" ||
+                    !flow.review.approved ||
+                    !shops.length ||
+                    !selectedCopiesReady ||
+                    busy === "draft"
+                  }
+                  onClick={createDrafts}
+                >
+                  {busy === "draft" ? <LoaderCircle className="spin" size={16} /> : <Store size={16} />}
+                  {busy === "draft" ? "妙手处理中" : "创建草稿"}
+                </button>
+              )}
               {draftPlatform === "TEMU" && <label className="draft-mode-toggle">
                 <input
                   type="checkbox"

@@ -97,6 +97,8 @@ export function ProductCenter() {
   const [batches, setBatches] = useState<ImportBatch[]>([]);
   const [detail, setDetail] = useState<ProductDetail | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selectedProductIds, setSelectedProductIds] = useState<number[]>([]);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
   const [activeTab, setActiveTab] = useState<DetailTab>("basics");
   const [selectedSkuId, setSelectedSkuId] = useState<number | null>(null);
   const [selectedBatchId, setSelectedBatchId] = useState<number | null>(null);
@@ -135,6 +137,7 @@ export function ProductCenter() {
     const data = await api<ProductSummary[]>(`/api/products?${params.toString()}`);
     setApiOnline(true);
     setProducts(data);
+    setSelectedProductIds((current) => current.filter((id) => data.some((item) => item.id === id)));
     setSelectedId((current) => {
       if (current && data.some((item) => item.id === current)) return current;
       return data[0]?.id ?? null;
@@ -379,6 +382,26 @@ export function ProductCenter() {
     }
   }
 
+  async function deleteSelectedProducts() {
+    if (!selectedProductIds.length) return;
+    if (!window.confirm(`确定删除选中的 ${selectedProductIds.length} 款商品吗？\n\n本地资料、SKU、图片任务和审核记录会被删除；已创建的妙手草稿不会被远程删除。`)) return;
+    setBulkDeleting(true);
+    setError(null);
+    try {
+      const result = await api<{ product_ids: number[] }>("/api/products/bulk-delete", {
+        method: "POST",
+        body: JSON.stringify({ product_ids: selectedProductIds }),
+      });
+      setSelectedProductIds([]);
+      setNotice(`已删除 ${result.product_ids.length} 款本地商品`);
+      await loadShell();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "批量删除失败");
+    } finally {
+      setBulkDeleting(false);
+    }
+  }
+
   async function addListing(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!detail) return;
@@ -480,17 +503,19 @@ export function ProductCenter() {
             <div className="product-pane">
               <div className="pane-heading product-pane-title"><div><PackageCheck size={16} /><strong>商品数据</strong><span>{products.length} 款</span></div></div>
               <div className="filters">
+                <label className="checkbox-field select-all-products"><input type="checkbox" checked={products.length > 0 && selectedProductIds.length === products.length} onChange={(event) => setSelectedProductIds(event.target.checked ? products.map((item) => item.id) : [])} /><span>全选</span></label>
                 <label className="search-field"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索 SPU / 商品名称" /></label>
                 <label className="select-field"><Filter size={15} /><select value={status} onChange={(event) => setStatus(event.target.value)}><option value="ALL">全部状态</option><option value="WAITING_DATA">待补资料</option><option value="WAITING_GENERATION">待生成</option><option value="READY">已就绪</option></select></label>
                 <label className="select-field store-filter"><StoreIcon size={15} /><select value={storeId} onChange={(event) => { setStoreId(event.target.value); setActiveStoreId(event.target.value); }}><option value="">全部店铺</option>{stores.map((store) => <option key={store.id} value={store.id}>{store.platform} · {store.name}</option>)}</select></label>
+                <button className="danger-command" type="button" onClick={() => void deleteSelectedProducts()} disabled={!selectedProductIds.length || bulkDeleting}>{bulkDeleting ? "删除中…" : `删除已选${selectedProductIds.length ? ` (${selectedProductIds.length})` : ""}`}</button>
               </div>
               <div className="table-wrap">
                 <table className="product-table">
-                  <thead><tr><th>商品</th><th>SKU</th><th>素材</th><th>店铺</th><th>状态</th></tr></thead>
+                  <thead><tr><th aria-label="选择" /> <th>商品</th><th>SKU</th><th>素材</th><th>店铺</th><th>状态</th></tr></thead>
                   <tbody>
                     {products.map((product) => (
                       <tr key={product.id} className={selectedId === product.id ? "selected" : ""} tabIndex={0} onClick={() => { setDetailLoading(true); setSelectedId(product.id); }} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setDetailLoading(true); setSelectedId(product.id); } }}>
-                        <td><div className="product-cell"><ProductThumb url={product.source_image_url} title={product.title} /><div><strong>{product.title}</strong><span>{product.spu_code}</span><small>{product.material || "材质待补"} · 库存 {product.stock}</small></div></div></td>
+                        <td onClick={(event) => event.stopPropagation()}><input aria-label={`选择 ${product.spu_code}`} type="checkbox" checked={selectedProductIds.includes(product.id)} onChange={(event) => setSelectedProductIds((current) => event.target.checked ? [...current, product.id] : current.filter((id) => id !== product.id))} /></td><td><div className="product-cell"><ProductThumb url={product.source_image_url} title={product.title} /><div><strong>{product.title}</strong><span>{product.spu_code}</span><small>{product.material || "材质待补"} · 库存 {product.stock}</small></div></div></td>
                         <td><strong>{product.ready_sku_count}/{product.sku_count}</strong><span className="cell-sub">可进入生成</span></td>
                         <td>{product.blocker_count ? <span className="issue-count error"><AlertCircle size={13} />{product.blocker_count}</span> : product.warning_count ? <span className="issue-count warning"><TriangleAlert size={13} />{product.warning_count}</span> : <span className="issue-count success"><Check size={13} />完整</span>}</td>
                         <td><strong>{product.listing_count}</strong><span className="cell-sub">发布版本</span></td>

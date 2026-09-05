@@ -570,6 +570,12 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .run-row { width: 100%; min-height: 42px; display: grid; align-items: center; gap: 10px; padding: 0 12px; border: 0; background: white; color: #36433c; text-align: left; cursor: pointer; font-size: 10px; }
 .run-row:hover { background: #f8faf9; }.success-text { color: #16734e; }.error-text { color: #b4483e; }
 .run-delete, .danger-command { color: #a13e36; border-color: #e5c8c4; background: #fffafa; cursor: pointer; }
+.simple-bulk-delete { position: relative; }
+.simple-bulk-delete summary { list-style: none; cursor: pointer; padding: 9px 12px; border: 1px solid var(--line); border-radius: 8px; color: #a13e36; background: #fffafa; white-space: nowrap; }
+.simple-bulk-delete summary::-webkit-details-marker { display: none; }
+.simple-bulk-menu { position: absolute; right: 0; top: calc(100% + 8px); z-index: 20; width: 210px; max-height: 300px; overflow: auto; padding: 10px; display: grid; gap: 7px; background: white; border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 12px 28px rgba(24, 46, 36, .16); }
+.simple-bulk-menu label { display: flex; gap: 8px; align-items: center; font-size: 13px; }
+.simple-bulk-menu button { margin-top: 4px; padding: 7px 9px; border-radius: 7px; }
 .bulk-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; font-size: 11px; }
 .bulk-toolbar label { display: inline-flex; align-items: center; gap: 6px; }
 .run-details { padding: 8px 12px 10px; background: #f7f9f8; }
