@@ -103,11 +103,6 @@ npm run lint
 npm run build
 ```
 
-## 适合写进简历的项目描述
-
-**Flow Console｜电商商品智能上架工作台**
-基于 Next.js、React、TypeScript、FastAPI、SQLAlchemy 和 PostgreSQL/SQLite 构建本地优先的饰品电商运营系统，打通 Excel/文件夹商品导入、SPU/SKU 数据校验、图片处理与 OCR、英文文案审核、合规材料管理、妙手店铺同步及 TEMU/AliExpress 草稿创建流程；通过幂等键、审核门禁、任务状态机、对象存储抽象和外部 ID/响应持久化，保证批量上架过程可追踪、可重试、可审计。
-
 ## 安全与数据边界
 
 - `.env`、数据库、素材、日志、依赖目录和本地模型均不进入 Git。
