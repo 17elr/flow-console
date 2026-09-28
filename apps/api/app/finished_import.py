@@ -16,6 +16,7 @@ from .storage import AssetValidationError, configured_storage, validate_image
 
 
 CATEGORY = "服装、鞋靴和珠宝饰品 > 女士时尚 > 女士饰品 > 女士项链 > 女士时尚吊坠项链"
+ALIEXPRESS_CATEGORY = "珠宝饰品及配件 (Jewelry & Accessories)/流行饰品 (Fashion Jewelry)/项链 (Necklace)"
 MAIN_ROLES = (
     "SPU_WHITE_MAIN",
     "SPU_DETAIL_1",
@@ -43,6 +44,21 @@ def _number(value: object, default: float = 0) -> float:
         return float(value) if value not in (None, "") else default
     except (TypeError, ValueError):
         return default
+
+
+def _first_value(row: dict[str, object], *names: str) -> object:
+    for name in names:
+        value = row.get(name)
+        if value not in (None, ""):
+            return value
+    return None
+
+
+def _weight_in_grams(row: dict[str, object], kg_names: tuple[str, ...], gram_names: tuple[str, ...]) -> float:
+    kilograms = _first_value(row, *(name for kg_name in kg_names for name in (kg_name, kg_name.replace(" KG(批量)", " KG"))))
+    if kilograms not in (None, ""):
+        return _number(kilograms) * 1000
+    return _number(_first_value(row, *gram_names))
 
 
 def _normalized_product_parameters(row: dict[str, object]) -> dict[str, object]:
@@ -266,7 +282,7 @@ def import_finished_package(db: Session, workbook_content: bytes, uploads: list[
         sku_files = [(filename, content) for filename, content, is_sku in files if is_sku]
         rows = [item for item in sku_rows if _text(item.get("产品编号")).casefold() == code.casefold()]
         product = db.scalar(select(ProductMaster).where(ProductMaster.spu_code == code))
-        title = _text(row.get("商品名称")) or _text(row.get("英文名称")) or code
+        title = _text(row.get("商品标题")) or _text(row.get("商品名称")) or _text(row.get("英文名称")) or code
         if not product:
             product = ProductMaster(spu_code=code, title=title, category=CATEGORY)
             db.add(product)
@@ -294,7 +310,7 @@ def import_finished_package(db: Session, workbook_content: bytes, uploads: list[
                     "颜色": stem,
                     "尺码/规格": row.get("尺码/规格"),
                     "SKU内单品件数": row.get("SKU内单品件数"),
-                    "申报价(CNY)": row.get("申报价(CNY)"),
+                    "申报价(CNY)": row.get("供货价(CNY)") if row.get("供货价(CNY)") not in (None, "") else row.get("申报价(CNY)"),
                     "库存数量": row.get("库存数量"),
                 })
 
@@ -329,9 +345,13 @@ def import_finished_package(db: Session, workbook_content: bytes, uploads: list[
         if rows:
             product.price = next((sku.price for sku in sku_map.values() if sku.price), 0)
             product.stock = sum(sku.stock for sku in sku_map.values())
-            dims = [_text(row.get(name)) for name in ("包装最长边(cm)", "包装次长边(cm)", "包装最短边(cm)")]
+            dims = [_text(_first_value(row, new_name, old_name, old_name.replace("(cm)", "（cm）"))) for new_name, old_name in (
+                ("包装最长边 CM(批量)", "包装最长边(cm)"),
+                ("包装次长边 CM(批量)", "包装次长边(cm)"),
+                ("包装最短边 CM(批量)", "包装最短边(cm)"),
+            )]
             product.dimensions = " x ".join(item for item in dims if item) or "见SKU规格"
-            product.weight_g = _number(row.get("商品净重(g)"), 0) or None
+            product.weight_g = _weight_in_grams(row, ("重量 KG(批量)", "商品净重 KG(批量)"), ("商品净重(g)", "商品净重（g）")) or None
 
         fingerprint = hashlib.sha256((code + "|" + "|".join(f"{name}:{hashlib.sha256(content).hexdigest()}" for name, content, _is_sku in files)).encode()).hexdigest()
         batch = ImageBatch(

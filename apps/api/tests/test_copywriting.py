@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 from fastapi.testclient import TestClient
 
-from app.copywriting import build_copy, update_copy, upsert_generated_copy
+from app.copywriting import build_copy, clean_generated_description, update_copy, upsert_generated_copy
 from app.db import Base, get_db
 from app.main import app
 from app.models import ProductMaster, SkuVariant
@@ -40,8 +40,15 @@ def test_platform_copy_uses_only_recorded_facts() -> None:
         result = build_copy(product, "ALIEXPRESS")
         assert result["title"] == "Stainless Steel Silver Gold Hoop Earrings 12mm 2-Piece Set"
         assert result["sku_names"]
+        assert result["description"] == ""
         assert "hypoallergenic" not in str(result).lower()
         assert result["issues"] == []
+
+
+def test_old_generated_description_is_removed_but_manual_copy_is_kept() -> None:
+    old = "This jewelry is offered in the SKU options listed on this page. Recorded dimensions: 12 x 12 x 12. Package contents, color, size and quantity follow the selected SKU."
+    assert clean_generated_description(old) == ""
+    assert clean_generated_description("A manually written description.") == "A manually written description."
 
 
 def test_copy_requires_clean_content_before_review() -> None:

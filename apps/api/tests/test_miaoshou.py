@@ -43,6 +43,32 @@ def test_miaoshou_status_requires_public_assets(monkeypatch) -> None:
     assert status["missing"] == ["PUBLIC_ASSET_BASE_URL"]
 
 
+def test_aliexpress_public_create_does_not_turn_platform_fields_into_custom_attributes(monkeypatch) -> None:
+    monkeypatch.setenv("MIAOSHOU_APP_KEY", "key")
+    monkeypatch.setenv("MIAOSHOU_APP_SECRET", "secret")
+    monkeypatch.setenv("MIAOSHOU_PUBLIC_COLLECT_CREATE_PATH", "/open/v1/product/common_collect_box/common_collect_box/add_common_collect_box_detail")
+    monkeypatch.delenv("MIAOSHOU_PUBLIC_COLLECT_CLAIM_PATH", raising=False)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content.decode())
+        assert body["itemNum"] == "042+BX03"
+        assert body["sourceAttrs"] == []
+        assert "category" not in body
+        assert "publishCountryList" not in body
+        return httpx.Response(200, json={"result": "success", "code": "success", "data": {"commonCollectBoxDetailId": 88}})
+
+    payload = {
+        "spu": "042+BX03",
+        "title": "Necklace",
+        "external_shop_id": "123",
+        "category": "Jewelry & Accessories/Fashion Jewelry/Necklace",
+        "category_parameters": {"材质(Material)": "不锈钢"},
+    }
+    with httpx.Client(transport=httpx.MockTransport(handler), base_url="https://example.test") as client:
+        result = MiaoshouProvider(client).create_aliexpress_draft(payload, "key")
+    assert result["external_id"] == "88"
+
+
 def test_miaoshou_origin_country_derives_province(monkeypatch) -> None:
     monkeypatch.setenv("MIAOSHOU_APP_KEY", "key")
     monkeypatch.setenv("MIAOSHOU_APP_SECRET", "secret")

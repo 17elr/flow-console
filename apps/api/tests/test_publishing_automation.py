@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import io
+import json
 import zipfile
 
 from openpyxl import load_workbook
+from PIL import Image
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
@@ -11,12 +13,12 @@ from sqlalchemy.pool import StaticPool
 from app.automation import recover_interrupted_runs, run_automation
 from app.db import Base
 from app.models import AutomationRun, ListingCopy, MiaoshouDraft, PackagingPreset, ProductMaster, ProductPackagingSelection, SkuVariant, Store, StoreAutomationConfig, StoreListing
-from app.publishing import build_listing_workbook, create_aliexpress_import_packages, create_store_drafts, listing_package
+from app.publishing import MIAOSHOU_FORMAT2_HEADERS, build_listing_workbook, create_aliexpress_import_packages, create_store_drafts, listing_package
 
 
 def setup_product(session: Session) -> tuple[ProductMaster, Store]:
     store = Store(name="Ali Test", platform="AliExpress", mode="POP", currency="USD", active=True)
-    product = ProductMaster(spu_code="PUB-001", title="Test necklace", category="Necklace", dimensions="45cm", price=10.5, stock=12, currency="USD")
+    product = ProductMaster(spu_code="PUB-001", title="Test necklace", category="Necklace", dimensions="45cm", price=10.5, stock=12, currency="USD", import_parameters_json=json.dumps({"产地（国家或地区） Origin": "中国大陆(Origin)", "高关注化学品 High-concerned chemical": "无"}, ensure_ascii=False))
     session.add_all([store, product]); session.flush()
     sku = SkuVariant(product_id=product.id, sku_code="PUB-001-S", name="Silver", color="Silver", size="45cm", quantity=1, price=11.0, stock=12, is_sellable=True)
     session.add(sku); session.flush()
@@ -96,10 +98,13 @@ def test_listing_package_contains_selected_packaging_image(monkeypatch) -> None:
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     Base.metadata.create_all(engine)
 
+    image_stream = io.BytesIO()
+    Image.new("RGB", (20, 20), "white").save(image_stream, "PNG")
+
     class Storage:
         def get(self, key: str) -> bytes:
             assert key == "packaging/preset-1.png"
-            return b"package-image"
+            return image_stream.getvalue()
 
     monkeypatch.setattr("app.publishing.configured_storage", lambda: Storage())
     with Session(engine) as session:
@@ -109,13 +114,29 @@ def test_listing_package_contains_selected_packaging_image(monkeypatch) -> None:
         session.add(ProductPackagingSelection(product_id=product.id, preset_id=preset.id)); session.commit()
         package, _ = listing_package(session, product, store)
         with zipfile.ZipFile(io.BytesIO(package)) as archive:
-            workbook_path = "本地导入素材/产品导入表格.xlsx"
-            packaging_path = "本地导入素材/产品图片/PUB-001/尺寸图表/包装图1.png"
+            root = "产品素材包模版2/本地导入素材/"
+            workbook_path = f"{root}产品导入表格.xlsx"
+            packaging_path = f"{root}产品图片/PUB-001/详情图/详情图_7.jpg"
+            assert archive.testzip() is None
             assert workbook_path in archive.namelist()
             assert packaging_path in archive.namelist()
+            with Image.open(io.BytesIO(archive.read(packaging_path))) as image:
+                assert image.format == "JPEG"
             workbook = load_workbook(io.BytesIO(archive.read(workbook_path)))
-            values = [cell.value for sheet in workbook.worksheets for row in sheet.iter_rows() for cell in row]
-            assert "产品图片/PUB-001/尺寸图表/包装图1.png" in values
+            sheet = workbook.worksheets[0]
+            expected_headers = list(MIAOSHOU_FORMAT2_HEADERS)
+            expected_headers[7:9] = ["规格1（颜色）", "SKU规格2（尺寸）"]
+            assert [cell.value for cell in sheet[2]] == expected_headers
+            assert sheet.max_row == 3
+            assert sheet["A3"].value == "PUB-001"
+            assert sheet["D3"].value == "PUB-001"
+            assert sheet["E3"].value == "手动创建"
+            assert sheet["H3"].value == "Silver"
+            assert sheet["J3"].value == "PUB-001-S"
+            assert sheet["C3"].value == "CNY"
+            assert sheet["K3"].value == 11.0
+            assert sheet["F3"].value == "A necklace offered in the listed SKU."
+            assert sheet["G3"].value is None
 
 
 def test_aliexpress_import_package_is_local_and_idempotent(monkeypatch) -> None:
@@ -143,9 +164,10 @@ def test_aliexpress_import_package_is_local_and_idempotent(monkeypatch) -> None:
         draft = session.scalar(select(MiaoshouDraft).where(MiaoshouDraft.store_id == store.id))
         assert draft is not None and draft.package_key
         with zipfile.ZipFile(io.BytesIO(storage.get(draft.package_key))) as archive:
-            workbook_path = "本地导入素材/产品导入表格.xlsx"
+            workbook_path = "产品素材包模版2/本地导入素材/产品导入表格.xlsx"
+            assert archive.testzip() is None
             assert workbook_path in archive.namelist()
-            assert load_workbook(io.BytesIO(archive.read(workbook_path))).sheetnames == ["商品参数与属性", "销售属性_SKU", "产品图片", "使用说明"]
+            assert load_workbook(io.BytesIO(archive.read(workbook_path))).sheetnames == ["Sheet1", "Sheet2", "Sheet3"]
         again = create_aliexpress_import_packages(session, product, state, [store.id])
         assert again[0]["idempotent"] is True
 

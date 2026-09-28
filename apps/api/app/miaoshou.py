@@ -411,15 +411,13 @@ class MiaoshouProvider:
         shop_id = str(payload.get("external_shop_id") or "").strip()
         if not shop_id:
             raise MiaoshouError("速卖通店铺授权 ID 缺失，请先同步店铺")
-        parameters = payload.get("category_parameters") or {}
-        source_attrs = [{"name": str(k), "value": str(v)} for k, v in parameters.items() if v not in (None, "")]
         dimensions = payload.get("dimensions") or {}
         product = {
             "title": payload.get("title") or "",
             "itemNum": str(payload.get("spu") or "").strip(),
             "notesText": payload.get("description") or "",
             "notes": payload.get("description") or "",
-            "sourceAttrs": source_attrs,
+            "sourceAttrs": [],
             "price": payload.get("price"),
             "stock": payload.get("stock"),
             "packageLength": dimensions.get("length"),
@@ -432,7 +430,7 @@ class MiaoshouProvider:
         # Public collect-box creation accepts these fields at the request root.
         result = self.request(path, product)
         data = result.get("data") or {}
-        external_id = data.get("collectBoxDetailId") or data.get("draftId") or data.get("productId") or data.get("id")
+        external_id = data.get("commonCollectBoxDetailId") or data.get("collectBoxDetailId") or data.get("draftId") or data.get("productId") or data.get("id")
         if not external_id:
             raise MiaoshouError("公共采集箱创建响应中没有 collectBoxDetailId")
         claim_path = os.getenv("MIAOSHOU_PUBLIC_COLLECT_CLAIM_PATH", "").strip()

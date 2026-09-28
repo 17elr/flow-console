@@ -84,6 +84,8 @@ def workflow_payload(db: Session, product: ProductMaster) -> dict:
     packaging_selection = db.scalar(select(ProductPackagingSelection).where(ProductPackagingSelection.product_id == product.id))
     packaging = db.get(PackagingPreset, packaging_selection.preset_id) if packaging_selection else None
     packaging_data = ({"id": packaging.id, "slot": packaging.slot, "filename": packaging.original_filename, "width": packaging.width, "height": packaging.height} if packaging else None)
+    parameters = json.loads(product.import_parameters_json or "{}")
+    product_data["parameters"] = parameters if parameters.get("_platform") == "ALIEXPRESS" else {}
     publish_blockers = (["请选择外包装图片"] if finished and not packaging else [])
     return {"product": product_data, "image_source": "FINISHED_UPLOAD" if finished else "GENERATED", "slots": serial_slots, "status": status, "missing_count": len(missing), "outputs": outputs, "output_count": complete, "expected_output_count": expected, "stores": stores, "drafts": draft_data, "listing_copies": copies, "review": review, "packaging_selection": packaging_data, "publish_blockers": publish_blockers}
 

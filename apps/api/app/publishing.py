@@ -4,10 +4,12 @@ import hashlib
 import io
 import json
 import os
+import re
 import zipfile
 from hashlib import sha256
 from datetime import datetime, timezone
-from openpyxl import Workbook
+from pathlib import Path
+from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from PIL import Image
@@ -16,12 +18,19 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from .image_pipeline import OUTPUT_ROLES
+from .copywriting import clean_generated_description
 from .miaoshou import MiaoshouError, configured_miaoshou, normalize_sku_classification
 from .models import AssetVersion, MiaoshouDraft, ProductMaster, SkuAsset, Store, StoreAutomationConfig, StoreListing, ProductPackagingSelection, PackagingPreset
 from .scene_pipeline import SCENE_ROLES
 from .storage import configured_storage
 
 PUBLISHING_PAYLOAD_VERSION = "temu-attrs-v14-public-image-base"
+ALIEXPRESS_PACKAGE_VERSION = "miaoshou-local-format2-v3"
+MIAOSHOU_FORMAT2_TEMPLATE = Path(__file__).resolve().parents[1] / "templates" / "miaoshou-local-material-format2.xlsx"
+MIAOSHOU_FORMAT2_HEADERS = (
+    "* 货号", "* 产品名称", "货币类型", "货源链接", "货源平台", "详情描述", "属性",
+    "规格1（test1）", "SKU规格2（容量）", "平台SKU", "* SKU售价", "SKU库存", "SKU重量(KG)", "SKU尺寸(CM)",
+)
 
 
 def _public_publish_image(provider, storage, source_key: str, public_base: str, cache: dict[str, str]) -> str:
@@ -117,7 +126,7 @@ def build_listing_workbook(db: Session, product: ProductMaster, store: Store) ->
     product_sheet = workbook.active
     product_sheet.title = "Product"
     product_sheet.append(["SPU", "Platform", "Store", "Title", "Category", "Price", "Currency", "Stock", "Dimensions", "Bullet Points", "Description"])
-    product_sheet.append([product.spu_code, store.platform, store.name, product.title, product.category, round((product.price or 0) * multiplier, 2), product.currency, product.stock, product.dimensions, "\n".join(bullets), copy.description])
+    product_sheet.append([product.spu_code, store.platform, store.name, product.title, product.category, round((product.price or 0) * multiplier, 2), product.currency, product.stock, product.dimensions, "\n".join(bullets), clean_generated_description(copy.description)])
     product_sheet["F2"].number_format = '"$"#,##0.00'
     _style_sheet(product_sheet, [18, 14, 24, 42, 18, 12, 10, 10, 18, 48, 60])
 
@@ -170,92 +179,135 @@ def build_listing_workbook(db: Session, product: ProductMaster, store: Store) ->
 
 
 def build_aliexpress_workbook(db: Session, product: ProductMaster, store: Store) -> bytes:
-    """Build the AliExpress-specific draft workbook.
-
-    AliExpress uses its own category/custom-attribute and SKU columns; keeping
-    these sheets separate prevents TEMU-only fields from being imported.
-    """
+    """Fill Miaoshou's official local-material format 2 workbook."""
     copy = next((item for item in product.listing_copies if item.platform == "ALIEXPRESS"), None)
     if not copy:
         raise ValueError("Missing AliExpress listing copy")
     parameters = json.loads(product.import_parameters_json or "{}")
-    bullets = json.loads(copy.bullet_points_json or "[]")
-    sku_names = json.loads(copy.sku_names_json or "{}")
-    config = db.scalar(select(StoreAutomationConfig).where(StoreAutomationConfig.store_id == store.id))
-    multiplier = config.price_multiplier if config else 1.0
-    workbook = Workbook()
-    basic = workbook.active
-    basic.title = "商品参数"
-    basic.append(["产品编号", "店铺名称", "商品名称", "商品类目", "售价", "币种", "库存", "最小计量单位", "销售方式", "产品描述", "要点说明"])
-    basic.append([product.spu_code, store.name, product.title, product.category, round((product.price or 0) * multiplier, 2), product.currency, product.stock, parameters.get("最小计量单位", "件/个"), parameters.get("销售方式", "按件出售"), copy.description, "\n".join(bullets)])
-    _style_sheet(basic, [18, 28, 52, 32, 12, 10, 10, 16, 16, 80, 60])
-    basic.row_dimensions[2].height = 110
-    attrs = workbook.create_sheet("类目与属性")
-    attrs.append(["属性名称", "当前值", "是否必填", "妙手可选值", "数据来源"])
-    # Fixed AliExpress necklace category fields transcribed from the Miaoshou
-    # editor. Values remain data-driven; the catalog is guidance for import.
-    catalogs = {
-        "Metals Type": ("金属类型", True, "SILVER,铜,不锈钢,钛,钨,沙金,锡合金,锡金,锌合金,铅锌合金,铜合金,无,铁合金,铝,铝合金,藏銀"),
-        "Necklace Type": ("项链类型", True, "链式项链,短项链/领箱,多层项链,吊坠项链,项圈,能量项链,毛衣链"),
-        "Material": ("材质", True, "不锈钢,SILVER,Velvet,锆石,玉,金刚石,钛钢,亚克力板,骨质,陶瓷,CLAY,人造珊瑚,CORAL,水晶,玻璃,HORN,LUcite,珍珠,塑料,树脂,莱茵石,半宝石,贝壳,硅胶,石头,木头,绸纱,COTTON,羽毛,蕾丝,皮质,ribbon,立方氧化锆,橄榄核,金刚菩提,菩提子,金属"),
-        "Clasp Type": ("扣合类型", True, "磁吸,扣,其他,无扣,龙虾爪扣,盒子,棒状,鹦鹉,钩子,弹簧圈"),
-        "Setting Material": ("镶嵌材质", True, "水钻,锆石,贝母,珍珠,人造宝石/半宝石,天然石,无"),
-        "Style": ("风格", False, "Y2K,经典,TRENDY,运动/休闲,BOHEMIA,朋克风,OL风格,甜美浪漫,复古风,嘻哈摇滚,Hyperbole,民族风,宗教,新哥特,维京,自然,极简主义,冥想保健,可爱"),
-        "Chain Type": ("链类型", False, "蛇链,O字链,新加坡链扭曲,索链,爆米花链,菲加罗链,绳链,水波链,无,珠串手链,STRAND,圆珠链,马鞍链,竹节链,刀片链,箱链"),
-        "Shape\\pattern": ("形状\\图案", False, "动物,花朵,PLANT,面部,心型,镂空,Star,月亮,水滴,圆形,海洋,锁,蝴蝶,KeY,铆钉,十字架,ANCHOR,昆虫,数字,球形,FAIRY,羽毛,几何,蝴蝶结,钩子,方块,字母,皇冠,Peace"),
-        "Compatibility": ("兼容性", False, "Ios,全兼容,Android"),
-        "Occasion": ("场合", False, "宴会,纪念日,婚庆,生日,ENGAGEMENT"),
-        "Certification": ("认证", False, "REACH检测报告"),
-    }
-    normalized = {str(k).replace("（", "(").replace("）", ")").strip(): v for k, v in parameters.items()}
-    for english, (cn, required, allowed) in catalogs.items():
-        value = normalized.get(english) or normalized.get(cn) or normalized.get(english.replace("\\", ""), "")
-        attrs.append([cn, value, "是" if required else "否", allowed, "妙手速卖通类目"])
-    for key, value in parameters.items():
-        if str(key) not in {item[0] for item in catalogs.values()} and value not in (None, ""):
-            attrs.append([str(key), value, "否", "", "商品导入数据"])
-    _style_sheet(attrs, [28, 34, 12, 110, 30])
-    attrs.freeze_panes = "A2"
-    skus = workbook.create_sheet("销售属性_SKU")
-    skus.append(["平台SKU", "商品SPU", "金属颜色", "自定义名称", "售价", "库存", "重量(kg)", "长度(cm)", "宽度(cm)", "高度(cm)", "特殊商品类型", "物流属性", "是否申请停售", "图片文件"])
-    for item in product.skus:
-        skus.append([item.sku_code, product.spu_code, item.color or "", sku_names.get(str(item.id), item.name or item.sku_code), round(((item.price or product.price) or 0) * multiplier, 2), item.stock, round((product.weight_g or 10) / 1000, 3), 10, 10, 2, parameters.get("特殊商品类型", "普货"), parameters.get("物流属性", "普货"), "否", f"产品图片/{product.spu_code}/SKU图/{item.sku_code}.png"])
-    _style_sheet(skus, [24, 18, 18, 32, 12, 10, 14, 14, 14, 14, 16, 20, 14, 42])
-    images = workbook.create_sheet("产品图片")
-    images.append(["图片用途", "图片文件", "是否必需"])
-    for role in OUTPUT_ROLES:
-        images.append([role, f"产品图片/{product.spu_code}/产品主图/{role}.png", "是"])
-    packaging = _packaging_preset(db, product)
-    if packaging:
-        extension = packaging.mime_type.split("/")[-1].replace("jpeg", "jpg")
-        images.append(["包装图", f"产品图片/{product.spu_code}/尺寸图表/包装图{packaging.slot}.{extension}", "否"])
-    _style_sheet(images, [28, 52, 12])
-    instructions = workbook.create_sheet("使用说明")
-    instructions.append(["步骤", "说明"])
-    instructions.append([1, "使用速卖通商品草稿/导入功能导入此模板。"])
-    instructions.append([2, "根据类目与属性工作表核对妙手中文类目属性。"])
-    instructions.append([3, "保存草稿前核对每个 SKU 的价格、库存、尺寸和图片。"])
-    instructions.append([4, "此模板只创建草稿，不执行自动上架。"])
-    _style_sheet(instructions, [10, 100])
-    # Keep the downloadable/importable workbook aligned with the standalone
-    # template: basic information and category attributes are one visible page.
-    basic.title = "商品参数与属性"
-    attr_start = basic.max_row + 3
-    for row in attrs.iter_rows():
-        for cell in row:
-            target = basic.cell(attr_start + cell.row - 1, cell.column, cell.value)
-            if cell.has_style:
-                target._style = cell._style
-    if attrs.title in workbook.sheetnames:
-        del workbook[attrs.title]
-    stream = io.BytesIO(); workbook.save(stream); return stream.getvalue()
+    # The source AliExpress workbook is authoritative for currency and price.
+    # Store pricing multipliers belong to API publishing, not local-material
+    # import, where they would silently change the uploaded spreadsheet data.
+    workbook = load_workbook(MIAOSHOU_FORMAT2_TEMPLATE)
+    sheet = workbook.worksheets[0]
+    if tuple(cell.value for cell in sheet[2]) != MIAOSHOU_FORMAT2_HEADERS:
+        raise ValueError("Miaoshou local-material template headers changed")
+    sheet.delete_rows(3, sheet.max_row - 2)
+    sheet["H2"] = "规格1（颜色）"
+    sheet["I2"] = "SKU规格2（尺寸）"
+
+    source_link = _parameter(parameters, "货源下单链接", "货源链接", default="")
+    source_id = source_link if str(source_link).startswith(("http://", "https://")) else product.spu_code
+    source_platform = "1688" if "1688.com" in str(source_link) else ("速卖通" if "aliexpress." in str(source_link) else "手动创建")
+    dimension_values = [
+        _parameter(parameters, name, default=None) for name in (
+            "包装最长边 CM(批量)", "包装次长边 CM(批量)", "包装最短边 CM(批量)"
+        )
+    ]
+    dimensions = "；".join(str(value) for value in dimension_values) if all(value not in (None, "") for value in dimension_values) else ""
+    kilograms = _parameter(parameters, "重量 KG(批量)", "包装重量 KG(批量)", "商品净重 KG(批量)", default=None)
+    if kilograms in (None, "") and product.weight_g is not None:
+        kilograms = round(product.weight_g / 1000, 3)
+    skus = [sku for sku in product.skus if sku.is_sellable]
+    if not skus:
+        raise ValueError("No sellable SKUs for Miaoshou local-material import")
+    for index, sku in enumerate(skus):
+        sheet.append([
+            product.spu_code,
+            product.title if index == 0 else None,
+            "CNY" if index == 0 else None,
+            source_id if index == 0 else None,
+            source_platform if index == 0 else None,
+            clean_generated_description(copy.description) if index == 0 else None,
+            None,
+            _miaoshou_spec_name(sku),
+            sku.size or None,
+            sku.sku_code,
+            round((sku.price if sku.price is not None else product.price) or 0, 2),
+            sku.stock,
+            kilograms,
+            dimensions,
+        ])
+    stream = io.BytesIO()
+    workbook.save(stream)
+    return stream.getvalue()
 
 
-def listing_package(db: Session, product: ProductMaster, store: Store) -> tuple[bytes, str]:
+def _miaoshou_spec_name(sku) -> str:
+    return re.sub(r'[\\/:*?"<>|\x00-\x1f]', "_", (sku.color or sku.sku_code).strip()) or sku.sku_code
+
+
+def _jpeg_image(content: bytes) -> bytes:
+    with Image.open(io.BytesIO(content)) as image:
+        image = image.convert("RGB")
+        output = io.BytesIO()
+        image.save(output, format="JPEG", quality=90)
+        return output.getvalue()
+
+
+def _aliexpress_material_package(db: Session, product: ProductMaster, store: Store) -> tuple[bytes, str]:
     stream = io.BytesIO()
     sku_assets = _latest_sku_assets(db, product)
     with zipfile.ZipFile(stream, "w", zipfile.ZIP_DEFLATED) as archive:
-        workbook = build_aliexpress_workbook(db, product, store) if platform_key(store) == "ALIEXPRESS" else build_listing_workbook(db, product, store)
+        root = "产品素材包模版2/本地导入素材/"
+        archive.writestr("产品素材包模版2/", "")
+        archive.writestr(root, "")
+        archive.writestr(f"{root}产品导入表格.xlsx", build_aliexpress_workbook(db, product, store))
+        image_root = f"{root}产品图片/{product.spu_code}/"
+        archive.writestr(f"{root}产品图片/", "")
+        archive.writestr(image_root, "")
+        for folder in ("SKU图", "产品主图", "产品视频", "产品证书", "尺寸图表", "详情图"):
+            archive.writestr(f"{image_root}{folder}/", "")
+        assets = db.scalars(select(AssetVersion).where(
+            AssetVersion.product_id == product.id,
+            AssetVersion.role.in_([*OUTPUT_ROLES, *SCENE_ROLES]),
+        ).order_by(AssetVersion.created_at.desc())).all()
+        latest = {}
+        for asset in assets:
+            latest.setdefault(asset.role, asset)
+        # Miaoshou shows only 产品主图 in the main product-image section. Put
+        # every generated product image there, while also retaining detail
+        # copies in 详情图 for description-image import.
+        main_roles = (
+            "SPU_WHITE_MAIN", "SPU_DETAIL_1", "SPU_DETAIL_2",
+            "SPU_SIZE_INFO", "SCENE_MODEL_WEAR", "SCENE_LIFESTYLE",
+        )
+        detail_roles = main_roles
+        for index, role in enumerate(main_roles, 1):
+            if asset := latest.get(role):
+                archive.writestr(f"{image_root}产品主图/主图_{index}.jpg", _jpeg_image(configured_storage().get(asset.storage_key)))
+        for index, role in enumerate(detail_roles, 1):
+            if asset := latest.get(role):
+                archive.writestr(f"{image_root}详情图/详情图_{index}.jpg", _jpeg_image(configured_storage().get(asset.storage_key)))
+        if asset := latest.get("SPU_SIZE_INFO"):
+            archive.writestr(f"{image_root}尺寸图表/尺寸图表.jpg", _jpeg_image(configured_storage().get(asset.storage_key)))
+        packaging = _packaging_preset(db, product)
+        if packaging:
+            try:
+                content = configured_storage().get(packaging.storage_key)
+            except FileNotFoundError:
+                content = None
+            if content:
+                archive.writestr(f"{image_root}详情图/详情图_{len(detail_roles) + 1}.jpg", _jpeg_image(content))
+        seen_colors = set()
+        for sku in product.skus:
+            if not sku.is_sellable or not (link := sku_assets.get(sku.id)):
+                continue
+            color = _miaoshou_spec_name(sku)
+            if color in seen_colors:
+                continue
+            seen_colors.add(color)
+            asset = db.get(AssetVersion, link.asset_version_id)
+            archive.writestr(f"{image_root}SKU图/{color}_1.jpg", _jpeg_image(configured_storage().get(asset.storage_key)))
+    return stream.getvalue(), f"{product.spu_code}-{store.platform.lower()}-import.zip"
+
+
+def listing_package(db: Session, product: ProductMaster, store: Store) -> tuple[bytes, str]:
+    if platform_key(store) == "ALIEXPRESS":
+        return _aliexpress_material_package(db, product, store)
+    stream = io.BytesIO()
+    sku_assets = _latest_sku_assets(db, product)
+    with zipfile.ZipFile(stream, "w", zipfile.ZIP_DEFLATED) as archive:
+        workbook = build_listing_workbook(db, product, store)
         root = "本地导入素材/"
         archive.writestr(f"{root}产品导入表格.xlsx", workbook)
         packaging = _packaging_preset(db, product)
@@ -304,7 +356,7 @@ def create_aliexpress_import_packages(
             results.append({"store_id": store.id, "status": "FAILED", "error": "请先确认速卖通英文文案"})
             continue
 
-        key = f"{publishing_key(db, product, store, state, auto_publish=False)}:manual-import"
+        key = f"{publishing_key(db, product, store, state, auto_publish=False)}:manual-import:{ALIEXPRESS_PACKAGE_VERSION}"
         draft = db.scalar(select(MiaoshouDraft).where(MiaoshouDraft.idempotency_key == key))
         if draft and draft.status == "PACKAGE_READY" and draft.package_key and not force:
             results.append({
@@ -568,11 +620,11 @@ def create_store_drafts(db: Session, product: ProductMaster, state: dict, store_
                 classification_code, _classification_name = normalize_sku_classification(
                     _parameter(parameters, "SKU分类", default="单品")
                 )
-                package_length = _parameter(parameters, "包装最长边(cm)", "包装最长边（cm）", default="")
-                package_width = _parameter(parameters, "包装次长边(cm)", "包装次长边（cm）", default="")
-                package_height = _parameter(parameters, "包装最短边(cm)", "包装最短边（cm）", default="")
-                package_weight = _parameter(parameters, "包装重量(g)", "包装重量（g）", default="")
-                net_weight = _parameter(parameters, "商品净重(g)", "商品净重（g）", default="")
+                package_length = _parameter(parameters, "包装最长边 CM(批量)", "包装最长边(cm)", "包装最长边（cm）", default="")
+                package_width = _parameter(parameters, "包装次长边 CM(批量)", "包装次长边(cm)", "包装次长边（cm）", default="")
+                package_height = _parameter(parameters, "包装最短边 CM(批量)", "包装最短边(cm)", "包装最短边（cm）", default="")
+                package_weight = _parameter(parameters, "重量 KG(批量)", "包装重量 KG(批量)", "包装重量(kg)", "包装重量(g)", "包装重量（g）", default="")
+                net_weight = _parameter(parameters, "重量 KG(批量)", "商品净重 KG(批量)", "商品净重(kg)", "商品净重(g)", "商品净重（g）", default="")
                 sku_piece_count = int(_parameter(parameters, "SKU内单品件数", default=1) or 1)
                 individually_packed = int(
                     _parameter(parameters, "individuallyPacked", "SKU是否独立包装", "是否独立包装", default=0)
@@ -642,8 +694,8 @@ def create_store_drafts(db: Session, product: ProductMaster, state: dict, store_
                         "mixedType": 1 if classification_code == 3 else 0,
                         "individuallyPacked": individually_packed,
                     }
-                excel_title = str(_parameter(parameters, "商品名称", default=product.title) or product.title).strip()
-                draft_payload = {"spu": product.spu_code, "title": excel_title, "description": copy.description, "price": round((product.price or 0) * multiplier, 2), "stock": product.stock, "store": store.name, "external_shop_id": store.external_shop_id, "category": product.category, "category_parameters": parameters, "packaging_img_urls": packaging_urls, "img_urls": image_urls, "description_img_urls": image_urls, "sku_map": sku_map, "dimensions": {"length": package_length, "width": package_width, "height": package_height}, "weight": package_weight}
+                excel_title = str(_parameter(parameters, "商品标题", "商品名称", default=product.title) or product.title).strip()
+                draft_payload = {"spu": product.spu_code, "title": excel_title, "description": clean_generated_description(copy.description), "price": round((product.price or 0) * multiplier, 2), "stock": product.stock, "store": store.name, "external_shop_id": store.external_shop_id, "category": product.category, "category_parameters": parameters, "packaging_img_urls": packaging_urls, "img_urls": image_urls, "description_img_urls": image_urls, "sku_map": sku_map, "dimensions": {"length": package_length, "width": package_width, "height": package_height}, "weight": package_weight}
                 if platform_key(store) == "ALIEXPRESS":
                     response = provider.create_aliexpress_draft(draft_payload, key)
                     auto_publish = False

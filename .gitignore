@@ -19,6 +19,7 @@ htmlcov/
 .docker-data/
 .runtime/
 apps/api/data/assets/
+apps/api/data/compliance/
 
 # Frontend
 node_modules/
@@ -30,9 +31,11 @@ system-diagnostic-*.log
 
 # Generated and temporary assets
 output/
+outputs/
 tmp/
 temp/
 *.tmp
+repaired.xlsx
 *.onnx
 
 # Editors and OS

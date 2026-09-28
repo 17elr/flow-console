@@ -95,6 +95,18 @@ def _sku_name(sku: dict) -> str:
     return " / ".join(parts) or sku["code"]
 
 
+def clean_generated_description(value: str | None) -> str:
+    """Drop the old deterministic paragraph while keeping user-written copy."""
+    text = str(value or "").strip()
+    if (
+        text.startswith("This ")
+        and " is offered in the SKU options listed on this page." in text
+        and text.endswith("Package contents, color, size and quantity follow the selected SKU.")
+    ):
+        return ""
+    return text
+
+
 def build_copy(product: ProductMaster, platform: str) -> dict:
     platform = platform.upper()
     if platform not in PLATFORM_RULES:
@@ -118,14 +130,8 @@ def build_copy(product: ProductMaster, platform: str) -> dict:
     if max_quantity > 1:
         bullets.append(f"Set quantity: up to {max_quantity} pieces, depending on the selected SKU.")
     bullets.append("Please select the required color, size and set quantity from the SKU options.")
-    description_parts = [f"This {facts['category'].lower()} is offered in the SKU options listed on this page."]
-    if facts["material"]:
-        description_parts.append(f"Recorded material: {facts['material']}.")
-    if facts["dimensions"]:
-        description_parts.append(f"Recorded dimensions: {facts['dimensions']}.")
-    description_parts.append("Package contents, color, size and quantity follow the selected SKU.")
     sku_names = {str(sku["id"]): _sku_name(sku) for sku in facts["skus"]}
-    result = {"title": title, "bullet_points": bullets[:5], "description": " ".join(description_parts), "sku_names": sku_names}
+    result = {"title": title, "bullet_points": bullets[:5], "description": "", "sku_names": sku_names}
     result["issues"] = validate_copy(platform, result)
     return result
 

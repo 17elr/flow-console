@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -305,6 +305,8 @@ class SimpleSkuCreate(BaseModel):
 
 
 class SimpleProductCreate(BaseModel):
+    platform: Literal["TEMU", "ALIEXPRESS"] = "TEMU"
+    parameters: dict[str, str] = {}
     spu_code: str
     title: str
     category: str
@@ -343,6 +345,7 @@ class PackagingBulkPatch(BaseModel):
 
 class FinishedDraftRetryCreate(BaseModel):
     product_ids: List[int]
+    platform: Optional[Literal["TEMU", "ALIEXPRESS"]] = None
 
 
 class ListingCopyUpdate(BaseModel):

@@ -37,7 +37,7 @@ ALIASES: Dict[str, Tuple[str, ...]] = {
     "dimensions": ("dimensions", "商品尺寸", "包装尺寸"),
     "weight_g": ("weight", "weightg", "重量", "重量g", "克重"),
     "cost": ("cost", "成本", "采购价"),
-    "price": ("price", "售价", "价格", "零售价"),
+    "price": ("price", "供货价", "售价", "价格", "零售价"),
     "currency": ("currency", "币种", "货币"),
     "stock": ("stock", "库存", "可售库存"),
     "quantity": ("quantity", "qty", "数量", "件数", "套装数量"),

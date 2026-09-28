@@ -45,6 +45,7 @@ from .models import (
 from .providers import configured_provider
 from .image_pipeline import OUTPUT_ROLES, dispatcher, input_fingerprint, readiness, sku_source_ready
 from .storage import AssetValidationError, configured_storage, validate_image
+from .compliance import router as compliance_router
 from .schemas import (
     BatchOut,
     AssetOut,
@@ -193,6 +194,7 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(title="AI Commerce Product Center", version="0.1.0", lifespan=lifespan)
+app.include_router(compliance_router)
 origins = [
     item.strip()
     for item in os.getenv(
@@ -349,6 +351,7 @@ def recalculate_product_status(product: ProductMaster) -> None:
 
 @app.get("/api/products", response_model=list[ProductSummary])
 def products(
+    platform: Optional[str] = Query(default=None),
     q: Optional[str] = Query(default=None),
     status: Optional[str] = Query(default=None),
     store_id: Optional[int] = Query(default=None),
@@ -368,7 +371,7 @@ def products(
     if store_id:
         stmt = stmt.join(StoreListing).where(StoreListing.store_id == store_id)
     items = db.scalars(stmt.order_by(ProductMaster.updated_at.desc())).unique().all()
-    return [summarize(item) for item in items]
+    return [summarize(item) for item in items if not platform or json.loads(item.import_parameters_json or "{}").get("_platform", "TEMU") == platform]
 
 
 @app.get("/api/products/{product_id}", response_model=ProductDetail)
@@ -463,11 +466,22 @@ def bulk_delete_products(payload: dict, db: Session = Depends(get_db)) -> dict:
 @app.post("/api/simple-products")
 def save_simple_product(payload: SimpleProductCreate, db: Session = Depends(get_db)) -> dict:
     product = db.scalar(select(ProductMaster).where(ProductMaster.spu_code == payload.spu_code.strip()))
+    if product and json.loads(product.import_parameters_json or "{}").get("_platform", "TEMU") != payload.platform:
+        raise HTTPException(status_code=409, detail="该商品编号属于另一个平台，请使用独立商品编号，原平台资料不会修改")
+    for row in payload.skus:
+        existing_sku = db.scalar(select(SkuVariant).where(SkuVariant.sku_code == row.sku_code.strip()))
+        if existing_sku and (not product or existing_sku.product_id != product.id):
+            raise HTTPException(status_code=409, detail="SKU编号已用于其他商品，请使用独立编号")
     if not product:
         product = ProductMaster(spu_code=payload.spu_code.strip(), title=payload.title.strip(), category=payload.category.strip(), price=payload.price, stock=payload.stock, dimensions=payload.dimensions.strip(), image_rights="UNKNOWN", status="WAITING_DATA")
         db.add(product); db.flush()
     else:
         product.title, product.category, product.price, product.stock, product.dimensions = payload.title.strip(), payload.category.strip(), payload.price, payload.stock, payload.dimensions.strip()
+    if payload.platform == "ALIEXPRESS":
+        parameters = json.loads(product.import_parameters_json or "{}")
+        parameters.update({key: value for key, value in payload.parameters.items() if not key.startswith("_")})
+        parameters["_platform"] = "ALIEXPRESS"
+        product.import_parameters_json = json.dumps(parameters, ensure_ascii=False)
     existing = {sku.sku_code: sku for sku in product.skus}
     for row in payload.skus:
         sku = existing.get(row.sku_code.strip())
@@ -485,10 +499,12 @@ def simple_product_workflow(product_id: int, db: Session = Depends(get_db)) -> d
 
 
 @app.post("/api/products/{product_id}/listing-copies")
-def generate_listing_copies(product_id: int, db: Session = Depends(get_db)) -> dict:
+def generate_listing_copies(product_id: int, db: Session = Depends(get_db), platform: str | None = None) -> dict:
+    if platform not in (None, "TEMU", "ALIEXPRESS"):
+        raise HTTPException(status_code=422, detail="无效平台")
     product = load_product(db, product_id)
-    for platform in ("TEMU", "ALIEXPRESS"):
-        upsert_generated_copy(db, product, platform)
+    for target in ([platform] if platform else ("TEMU", "ALIEXPRESS")):
+        upsert_generated_copy(db, product, target)
     for attempt in range(3):
         try:
             db.commit()
@@ -1301,8 +1317,11 @@ def import_finished_images(
     workbook: UploadFile = File(...),
     files: list[UploadFile] = File(...),
     relative_paths: list[str] = Form(default=[]),
+    platform: str | None = Form(default=None),
     db: Session = Depends(get_db),
 ) -> dict:
+    if platform not in (None, "TEMU", "ALIEXPRESS"):
+        raise HTTPException(status_code=422, detail="无效平台")
     if not (workbook.filename or "").lower().endswith((".xlsx", ".xlsm")):
         raise HTTPException(status_code=422, detail="请选择系统提供的 Excel 参数模板")
     workbook_content = workbook.file.read()
@@ -1318,8 +1337,24 @@ def import_finished_images(
     if not uploads:
         raise HTTPException(status_code=422, detail="所选文件夹中没有 PNG、JPG 或 WebP 图片")
     try:
+        if platform:
+            from .finished_import import parse_finished_workbook
+            rows, _, _ = parse_finished_workbook(workbook_content)
+            for row in rows:
+                existing = db.scalar(select(ProductMaster).where(ProductMaster.spu_code == str(row["产品编号"]).strip()))
+                if existing and json.loads(existing.import_parameters_json or "{}").get("_platform", "TEMU") != platform:
+                    raise ValueError("商品编号已用于另一个平台，请使用独立编号，原平台资料不会修改")
         result = import_finished_package(db, workbook_content, uploads)
-        result["draft_results"] = auto_create_finished_drafts(db, result)
+        if platform == "ALIEXPRESS":
+            for product_id in result.get("product_ids", []):
+                imported = db.get(ProductMaster, product_id)
+                params = json.loads(imported.import_parameters_json or "{}")
+                params["_platform"] = "ALIEXPRESS"
+                imported.import_parameters_json = json.dumps(params, ensure_ascii=False)
+                from .finished_import import ALIEXPRESS_CATEGORY
+                imported.category = ALIEXPRESS_CATEGORY
+            db.commit()
+        result["draft_results"] = auto_create_finished_drafts(db, result, platform)
         return result
     except (ValueError, AssetValidationError) as exc:
         db.rollback()
@@ -1379,12 +1414,12 @@ def _ensure_finished_review_ready(db: Session, product: ProductMaster, state: di
     return refreshed
 
 
-def auto_create_finished_drafts(db: Session, import_result: dict) -> list[dict]:
+def auto_create_finished_drafts(db: Session, import_result: dict, platform: str | None = None) -> list[dict]:
     results: list[dict] = []
     stores = db.scalars(
         select(Store).where(
             Store.active.is_(True),
-            func.upper(Store.platform).in_(["TEMU", "ALIEXPRESS"]),
+            func.upper(Store.platform).in_([platform] if platform else ["TEMU", "ALIEXPRESS"]),
             Store.external_shop_id.is_not(None),
         ).order_by(Store.id)
     ).all()
@@ -1427,7 +1462,7 @@ def retry_finished_image_drafts(payload: FinishedDraftRetryCreate, db: Session =
         {"product_id": product_id, "missing": [], "conflicts": []}
         for product_id in product_ids
     ]
-    return {"draft_results": auto_create_finished_drafts(db, {"product_ids": product_ids, "products": products})}
+    return {"draft_results": auto_create_finished_drafts(db, {"product_ids": product_ids, "products": products}, payload.platform)}
 
 
 def packaging_payload(item: PackagingPreset | None) -> dict | None:

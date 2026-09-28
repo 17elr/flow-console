@@ -32,8 +32,9 @@ const roleNames: Record<string, string> = {
   SPU_WHITE_MAIN: "白底主图", SPU_DETAIL_1: "细节图 1", SPU_DETAIL_2: "细节图 2",
   SPU_SIZE_INFO: "尺寸信息图", SCENE_MODEL_WEAR: "模特佩戴图", SCENE_LIFESTYLE: "生活场景图",
 };
+const successfulDraftStatuses = new Set(["DRAFT_CREATED", "PACKAGE_READY", "PUBLISHED"]);
 
-export function FinishedUpload({ onImported }: { onImported: () => void }) {
+export function FinishedUpload({ onImported, platform = "TEMU" }: { onImported: () => void; platform?: "TEMU" | "ALIEXPRESS" }) {
   const [open, setOpen] = useState(false);
   const [workbook, setWorkbook] = useState<File | null>(null);
   const [images, setImages] = useState<File[]>([]);
@@ -58,6 +59,7 @@ export function FinishedUpload({ onImported }: { onImported: () => void }) {
   async function submit() {
     if (!workbook || !images.length) return;
     const body = new FormData(); body.append("workbook", workbook);
+    body.append("platform", platform);
     for (const file of images) { body.append("files", file, file.name); body.append("relative_paths", file.webkitRelativePath || file.name); }
     setBusy("import"); setError("");
     try { const data = await api<ImportResult>("/api/imports/finished-images", { method: "POST", body }); setResult(data); onImported(); }
@@ -81,11 +83,12 @@ export function FinishedUpload({ onImported }: { onImported: () => void }) {
 
   async function retryDrafts(productIds: number[]) {
     if (!productIds.length) return;
-    const data = await api<DraftRetryResult>("/api/imports/finished-images/auto-drafts", { method: "POST", body: JSON.stringify({ product_ids: productIds }) });
+    const data = await api<DraftRetryResult>("/api/imports/finished-images/auto-drafts", { method: "POST", body: JSON.stringify({ product_ids: productIds, platform }) });
     setResult((current) => current ? { ...current, draft_results: data.draft_results } : current);
-    const created = data.draft_results?.filter((item) => item.status === "DRAFT_CREATED").length ?? 0;
-    const failed = (data.draft_results?.length ?? 0) - created;
-    setError(failed ? `${created} 个草稿已创建，${failed} 个仍失败，请看下方原因` : `${created} 个妙手草稿已创建`);
+    const succeeded = data.draft_results?.filter((item) => successfulDraftStatuses.has(item.status)).length ?? 0;
+    const failed = (data.draft_results?.length ?? 0) - succeeded;
+    const successText = platform === "ALIEXPRESS" ? "个导入包已生成" : "个妙手草稿已创建";
+    setError(failed ? `${succeeded} ${successText}，${failed} 个仍失败，请看下方原因` : `${succeeded} ${successText}`);
     onImported();
   }
 
@@ -121,7 +124,7 @@ export function FinishedUpload({ onImported }: { onImported: () => void }) {
   return (
     <section className="finished-import">
       <div className="finished-import-head">
-        <div><strong>已有成品图？直接上传并上架</strong><span>跳过 AI 生图，用产品编号自动匹配单页 Excel 和图片文件夹</span></div>
+        <div><strong>{platform === "TEMU" ? "已有成品图？直接上传并上架" : "速卖通成品图与参数导入"}</strong><span>{platform === "TEMU" ? "跳过 AI 生图，用产品编号自动匹配单页 Excel 和图片文件夹" : "请使用速卖通模板；仅创建速卖通草稿，不自动发布"}</span></div>
         <button className="finished-toggle" onClick={() => setOpen((value) => !value)}><Upload size={15} />{open ? "收起" : "上传成品图"}</button>
       </div>
       {open ? <div className="finished-import-body">
@@ -143,12 +146,12 @@ export function FinishedUpload({ onImported }: { onImported: () => void }) {
           <label className={images.length ? "finished-drop selected" : "finished-drop"}><FolderOpen size={24} /><strong>{images.length ? `${folders} 个产品文件夹` : "选择成品图总文件夹"}</strong><span>{images.length ? `已读取 ${images.length} 张图片` : "每个子文件夹用产品编号命名"}</span><input type="file" multiple accept="image/png,image/jpeg,image/webp" ref={(node) => { if (node) { node.setAttribute("webkitdirectory", ""); node.setAttribute("directory", ""); } }} onChange={chooseFolder} /></label>
         </div>
         <div className="finished-naming"><strong>识别规则</strong><code>产品编号文件夹 / 6张主图（按上传顺序） / sku子文件夹（文件名为SKU编号）</code><span>主图文件名不限；SKU图片名必须在全部商品中唯一，无法匹配或重复时禁止创建草稿。</span></div>
-        <div className="finished-actions"><span>{error || (busy.startsWith("bulk-packaging") ? "正在应用包装图并重试创建草稿" : workbook && images.length ? "资料已选择，上传后会自动创建妙手草稿" : "请分别选择 Excel 和成品图文件夹")}</span><button disabled={!workbook || !images.length || busy === "import"} onClick={submit}>{busy === "import" ? <LoaderCircle className="spin" size={15} /> : <CheckCircle2 size={15} />}{busy === "import" ? "正在上传并创建草稿" : "上传并自动创建草稿"}</button></div>
+        <div className="finished-actions"><span>{error || (busy.startsWith("bulk-packaging") ? "正在应用包装图并重试创建草稿" : workbook && images.length ? platform === "ALIEXPRESS" ? "资料已选择，可以批量导入速卖通商品" : "资料已选择，上传后会自动创建妙手草稿" : "请分别选择 Excel 和成品图文件夹")}</span><button disabled={!workbook || !images.length || busy === "import"} onClick={submit}>{busy === "import" ? <LoaderCircle className="spin" size={15} /> : <CheckCircle2 size={15} />}{busy === "import" ? "正在上传资料" : platform === "ALIEXPRESS" ? "批量导入速卖通资料" : "上传并自动创建草稿"}</button></div>
         {result ? <div className="finished-result">
-          <div className="finished-result-summary"><strong>{result.matched_count} / {result.product_count} 款图片完整</strong><span>完整商品会自动创建妙手草稿，默认不自动发布</span></div>
-          {result.draft_results?.length ? <div className="finished-draft-results">{result.draft_results.map((draft, index) => <div key={`${draft.product_id}-${draft.store_id}-${index}`} className={draft.status === "DRAFT_CREATED" ? "ok" : "issue"}>
-            {draft.status === "DRAFT_CREATED" ? <CheckCircle2 size={15} /> : <XCircle size={15} />}
-            <span><strong>{draft.spu ?? `商品 ${draft.product_id ?? ""}`}</strong>{draft.status === "DRAFT_CREATED" ? `妙手草稿 ${draft.external_id} 已创建` : draft.error ?? draft.status}</span>
+          <div className="finished-result-summary"><strong>{result.matched_count} / {result.product_count} 款图片完整</strong><span>{platform === "ALIEXPRESS" ? "商品资料已保存；生成导入包后需在妙手后台手工导入" : "完整商品会自动创建妙手草稿，默认不自动发布"}</span></div>
+          {result.draft_results?.length ? <div className="finished-draft-results">{result.draft_results.map((draft, index) => <div key={`${draft.product_id}-${draft.store_id}-${index}`} className={successfulDraftStatuses.has(draft.status) ? "ok" : "issue"}>
+            {successfulDraftStatuses.has(draft.status) ? <CheckCircle2 size={15} /> : <XCircle size={15} />}
+            <span><strong>{draft.spu ?? `商品 ${draft.product_id ?? ""}`}</strong>{draft.status === "PACKAGE_READY" ? "本地素材包已生成，需在妙手“本地素材包导入”上传；尚未经过妙手解析" : draft.status === "DRAFT_CREATED" ? `妙手草稿 ${draft.external_id} 已创建` : draft.status === "PUBLISHED" ? "已发布" : draft.error ?? draft.status}</span>
           </div>)}</div> : null}
           {result.extra_folders.length ? <p className="finished-warning">Excel 中找不到这些文件夹：{result.extra_folders.join("、")}</p> : null}
           <div className="finished-match-list">{result.products.map((product) => {

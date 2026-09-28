@@ -154,6 +154,10 @@ export function SimpleWorkbench() {
   const [draftPlatform, setDraftPlatform] = useState<"TEMU" | "ALIEXPRESS">("TEMU");
   const [autoPublish, setAutoPublish] = useState(false);
   const [copyPlatform, setCopyPlatform] = useState("TEMU");
+  const [pdfKind, setPdfKind] = useState("REACH 检测报告");
+  const [pendingPdf, setPendingPdf] = useState<{ label: string; file: File } | null>(null);
+  const [complianceFiles, setComplianceFiles] = useState<Array<{ id: number; kind: string; filename: string; recognition: string; text: string }>>([]);
+  const [complianceLibrary, setComplianceLibrary] = useState<Array<{ id: number; kind: string; filename: string; product_id: number }>>([]);
   const [form, setForm] = useState({
     spu_code: "",
     title: "",
@@ -165,11 +169,11 @@ export function SimpleWorkbench() {
   });
 
   const loadProducts = useCallback(async () => {
-    const data = await api<ProductSummary[]>("/api/products?limit=100");
+    const data = await api<ProductSummary[]>(`/api/products?limit=100&platform=${draftPlatform}`);
     setProducts(data);
     const requested = Number(new URLSearchParams(window.location.search).get("product"));
     setSelectedId((value) => (requested && data.some((item) => item.id === requested) ? requested : value ?? data[0]?.id ?? null));
-  }, []);
+  }, [draftPlatform]);
   const loadFlow = useCallback(
     async (id: number) =>
       setFlow(await api<Workflow>(`/api/products/${id}/workflow`)),
@@ -197,6 +201,19 @@ export function SimpleWorkbench() {
     );
     return () => clearInterval(timer);
   }, [selectedId, flow?.status, loadFlow]);
+  const refreshCompliance = useCallback(async (productId: number) => {
+    const [files, library] = await Promise.all([
+      api<typeof complianceFiles>(`/api/products/${productId}/compliance`),
+      api<typeof complianceLibrary>("/api/compliance-library"),
+    ]);
+    setComplianceFiles(files);
+    setComplianceLibrary(library);
+  }, []);
+  useEffect(() => {
+    if (draftPlatform !== "ALIEXPRESS" || !selectedId) return;
+    const timer = window.setTimeout(() => refreshCompliance(selectedId).catch(error => setNotice(error instanceof Error ? error.message : "读取材料失败")), 0);
+    return () => window.clearTimeout(timer);
+  }, [draftPlatform, selectedId, refreshCompliance]);
 
   const missing =
     flow?.slots.filter((slot) => slot.required && slot.status === "MISSING") ??
@@ -221,12 +238,44 @@ export function SimpleWorkbench() {
     return platform === draftPlatform;
   }) ?? [];
   function chooseDraftPlatform(platform: "TEMU" | "ALIEXPRESS") {
+    if (platform === draftPlatform) return;
+    setSelectedId(null);
+    setSelectedProductIds([]);
+    setProducts([]);
+    setFlow(null);
+    setForm({spu_code:"",title:"",category:"",price:0,stock:0,dimensions:"",skus:[newSku()]});
     setDraftPlatform(platform);
+    setCopyPlatform(platform);
+    setComplianceFiles([]);
+    setNotice("");
     setShops([]);
     setAutoPublish(false);
   }
   const tell = (error: unknown) =>
     setNotice(error instanceof Error ? error.message : "操作失败");
+  async function uploadCompliance(label: string, file: File): Promise<boolean> {
+    if (!flow || flow.product.id !== selectedId || draftPlatform !== "ALIEXPRESS") return false;
+    const kind = label === "外包装/标签图" ? "label" : label === "REACH 检测报告" ? "reach" : "other";
+    const body = new FormData(); body.append("file", file);
+    setBusy(`compliance-${kind}`);
+    try {
+      await api(`/api/products/${flow.product.id}/compliance/${kind}`, { method: "PUT", body });
+      await refreshCompliance(flow.product.id);
+      setNotice(`${label}已上传并完成读取校验`);
+      return true;
+    } catch (e) { tell(e); return false; }
+    finally { setBusy(""); }
+  }
+  async function chooseCompliance(label: string, event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (!flow || flow.product.id !== selectedId) {
+      setPendingPdf({ label, file });
+      return;
+    }
+    if (await uploadCompliance(label, file)) setPendingPdf(null);
+  }
   async function deleteSelectedProduct() {
     if (!selectedId || !flow) return;
     const productName = `${flow.product.spu_code} · ${flow.product.title}`;
@@ -270,7 +319,7 @@ export function SimpleWorkbench() {
     try {
       const data = await api<Workflow>("/api/simple-products", {
         method: "POST",
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, platform: draftPlatform }),
       });
       setFlow(data);
       setSelectedId(data.product.id);
@@ -529,11 +578,11 @@ export function SimpleWorkbench() {
     setBusy("copy-generate");
     try {
       setFlow(
-        await api<Workflow>(`/api/products/${flow.product.id}/listing-copies`, {
+        await api<Workflow>(`/api/products/${flow.product.id}/listing-copies?platform=${draftPlatform}`, {
           method: "POST",
         }),
       );
-      setNotice("两套英文文案已生成，请检查并确认");
+      setNotice(`${draftPlatform === "TEMU" ? "TEMU" : "速卖通"}英文文案已生成，请检查并确认`);
     } catch (e) {
       tell(e);
     } finally {
@@ -590,6 +639,11 @@ export function SimpleWorkbench() {
     skus[index] = { ...skus[index], [field]: value };
     setForm({ ...form, skus });
   }
+
+  const selectedPdf = complianceFiles.find(
+    (item) => item.kind === (pdfKind === "REACH 检测报告" ? "reach" : "other"),
+  );
+  const activePdfProduct = flow?.product.id === selectedId ? flow.product : null;
 
   return (
     <div className="simple-app">
@@ -650,7 +704,21 @@ export function SimpleWorkbench() {
             </span>
           )}
         </div>
-        <FinishedUpload onImported={() => loadProducts().catch(tell)} />
+        <div className="draft-platform-tabs platform-mode-switch" role="group" aria-label="工作台模式">
+          <button type="button" disabled={!!busy} aria-pressed={draftPlatform === "TEMU"} className={draftPlatform === "TEMU" ? "active" : ""} onClick={() => chooseDraftPlatform("TEMU")}>TEMU 模式</button>
+          <button type="button" disabled={!!busy} aria-pressed={draftPlatform === "ALIEXPRESS"} className={draftPlatform === "ALIEXPRESS" ? "active" : ""} onClick={() => chooseDraftPlatform("ALIEXPRESS")}>速卖通模式</button>
+        </div>
+        {draftPlatform === "ALIEXPRESS" && <div className="compliance-quick-upload">
+          <strong>本地上传 PDF 资质</strong>
+          <select aria-label="资质类型" value={pdfKind} onChange={(event) => setPdfKind(event.target.value)}><option>REACH 检测报告</option><option>其他资质证明</option></select>
+          <label className="file-command" title={activePdfProduct ? `上传至商品 ${activePdfProduct.spu_code}` : "先选择 PDF，导入商品后再上传"}>
+            <Upload size={15} />{busy.startsWith("compliance-") ? "上传中…" : "选择本地 PDF"}
+            <input type="file" accept=".pdf,application/pdf" disabled={busy.startsWith("compliance-")} onChange={(event) => chooseCompliance(pdfKind, event)} />
+          </label>
+          {pendingPdf && activePdfProduct && <button type="button" className="file-command pending-upload" disabled={busy.startsWith("compliance-")} onClick={async () => { if (await uploadCompliance(pendingPdf.label, pendingPdf.file)) setPendingPdf(null); }}>上传到商品 {activePdfProduct.spu_code}</button>}
+          <span>{pendingPdf ? `已选择 ${pendingPdf.label}：${pendingPdf.file.name}；${activePdfProduct ? "点击上传到当前商品" : "导入或选择商品后再上传"}` : activePdfProduct ? `当前商品：${activePdfProduct.spu_code}${selectedPdf ? ` · 已保存：${selectedPdf.filename}` : ""}` : "可先选择 PDF，再在下方导入商品"}</span>
+        </div>}
+        <FinishedUpload key={draftPlatform} platform={draftPlatform} onImported={() => loadProducts().catch(tell)} />
         <nav className="simple-steps six">
           {[
             "商品资料",
@@ -670,7 +738,7 @@ export function SimpleWorkbench() {
           <Heading
             number="1"
             title="商品资料"
-            text="只填写生成图片和创建草稿所需的信息"
+            text={draftPlatform === "ALIEXPRESS" ? "商品信息与普通属性在 Excel 中批量填写；网页只上传特殊材料" : "只填写生成图片和创建草稿所需的信息"}
           />
           {flow ? (
             <div className="product-summary">
@@ -688,6 +756,8 @@ export function SimpleWorkbench() {
                 </div>
               ))}
             </div>
+          ) : draftPlatform === "ALIEXPRESS" ? (
+            <p className="compliance-note">请在上方上传填写好的 Excel 与成品图文件夹。包装标签图和资质文件可在商品导入后于网页上传，其他商品属性均通过 Excel 批量填写。</p>
           ) : (
             <div className="simple-form">
               <Field
@@ -801,6 +871,25 @@ export function SimpleWorkbench() {
             </div>
           )}
         </section>
+        {flow && draftPlatform === "ALIEXPRESS" && <section className="simple-section compliance-section">
+          <Heading number="1A" title="物流与资质材料" text="这些材料不会从商品图片推断，请按平台要求从本地上传真实文件。" />
+          <div className="compliance-grid">
+            {[
+              ["外包装/标签图", "包装袋或标签实拍图，需能看清制造商、警示语等信息。", "image/png,image/jpeg,image/webp"],
+              ["REACH 检测报告", "上传真实报告 PDF、PPT/PPTX 或清晰图片；无法识别的内容需人工核对。", ".pdf,.ppt,.pptx,image/png,image/jpeg,image/webp"],
+              ["其他资质证明", "按适用地区上传真实资质 PDF、PPT/PPTX 或图片，可从已上传文件中复用。", ".pdf,.ppt,.pptx,image/png,image/jpeg,image/webp"],
+            ].map(([label, help, accept]) => {
+              const kind = label === "外包装/标签图" ? "label" : label === "REACH 检测报告" ? "reach" : "other";
+              const picked = complianceFiles.find((item) => item.kind === kind);
+              return <div className="compliance-card" key={label}>
+                <div><strong>{label}</strong><span>{help}</span><small>{picked ? `已保存：${picked.filename} · ${picked.recognition}` : "尚未上传"}</small>{picked?.text && <small>识别内容：{picked.text.slice(0, 160)}</small>}{picked && <a href={`${API_URL}/api/products/${flow.product.id}/compliance/files/${picked.id}`} target="_blank" rel="noreferrer">查看已保存文件</a>}</div>
+                <label className="file-command"><Upload size={15} />{picked ? "替换" : "本地上传"}<input type="file" accept={accept} onChange={(event) => chooseCompliance(label, event)} /></label>
+                <select aria-label={`为${label}复用已上传文件`} value="" onChange={async event => { const assetId = Number(event.target.value); if (!assetId) return; try { await api(`/api/products/${flow.product.id}/compliance/${kind}/reuse/${assetId}`, {method:"POST"}); await refreshCompliance(flow.product.id); } catch (error) { tell(error); } }}><option value="">选择已上传文件复用</option>{complianceLibrary.filter(item => item.kind === kind && item.product_id !== flow.product.id).map(item => <option key={item.id} value={item.id}>{item.filename}</option>)}</select>
+              </div>;
+            })}
+          </div>
+          <p className="compliance-note">材料保存在本机服务端，可供其他速卖通商品直接复用。识别仅供核对；目前不会自动提交妙手资质审核。</p>
+        </section>}
         {flow && (
           <>
             {flow.image_source !== "FINISHED_UPLOAD" && <section className="simple-section">
@@ -1055,10 +1144,6 @@ export function SimpleWorkbench() {
                 title={draftPlatform === "ALIEXPRESS" ? "选择速卖通店铺并生成导入包" : "选择店铺并创建草稿"}
                 text={draftPlatform === "ALIEXPRESS" ? "生成 Excel 和图片 ZIP，导入妙手后手工核对并保存" : "选择平台后创建对应的妙手商品草稿"}
               />
-              <div className="draft-platform-tabs" role="tablist" aria-label="草稿平台">
-                <button type="button" className={draftPlatform === "TEMU" ? "active" : ""} onClick={() => chooseDraftPlatform("TEMU")}>TEMU 草稿</button>
-                <button type="button" className={draftPlatform === "ALIEXPRESS" ? "active" : ""} onClick={() => chooseDraftPlatform("ALIEXPRESS")}>速卖通导入包</button>
-              </div>
               <div className="store-list">
                 {draftShops.map((shop) => (
                   <label
@@ -1137,7 +1222,7 @@ export function SimpleWorkbench() {
                 </p>
               )}
               <div className="draft-results">
-                {flow.drafts.map((draft) => {
+                {flow.drafts.filter((draft) => draftShops.some((shop) => shop.store_id === draft.store_id)).map((draft) => {
                   const shop = flow.stores.find(
                     (s) => s.store_id === draft.store_id,
                   );
@@ -1149,7 +1234,7 @@ export function SimpleWorkbench() {
                         {draft.status === "DRAFT_CREATED"
                           ? "妙手草稿已创建"
                           : draft.status === "PACKAGE_READY"
-                            ? "导入包已准备"
+                            ? "本地素材包已生成，尚未经过妙手解析"
                             : draft.status === "PUBLISHED"
                               ? "妙手已发布"
                               : draft.status === "PUBLISHING"
@@ -1161,7 +1246,7 @@ export function SimpleWorkbench() {
                           href={`${API_URL}/api/miaoshou-drafts/${draft.id}/package`}
                         >
                           <Download size={14} />
-                          下载导入包
+                          下载本地素材包 ZIP
                         </a>
                       )}
                       {draft.error_message && <em>{draft.error_message}</em>}
@@ -1169,6 +1254,7 @@ export function SimpleWorkbench() {
                   );
                 })}
               </div>
+              <p className="compliance-note">ZIP 请在妙手“产品采集 → 导入采集 → 本地素材包导入”上传；“Excel表格导入”不接收此素材包。</p>
             </section>
           </>
         )}
@@ -1346,7 +1432,7 @@ function CopySection({
             {[
               ["TEMU", "TEMU"],
               ["ALIEXPRESS", "速卖通"],
-            ].map(([value, label]) => {
+            ].filter(([value]) => value === platform).map(([value, label]) => {
               const record = flow.listing_copies.find(
                 (item) => item.platform === value,
               );

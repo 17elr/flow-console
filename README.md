@@ -1,84 +1,97 @@
 # Flow Console
 
-面向女士饰品电商运营的本地上架工作台。Flow Console 将商品资料导入、SPU/SKU 校验、商品图处理、英文文案审核、店铺草稿创建和自动化运行记录集中在一个 Windows 桌面工作流中。
+> 面向女士饰品电商运营的本地商品上架工作台
 
-> 当前仓库按本地单机环境设计。TEMU 流程已包含草稿、认领、库存保存、发布和权威状态核验；AliExpress 已实现公共采集箱创建与店铺认领代码路径，但真实副作用调用仍需在受控商品上验证。AliExpress 默认只创建草稿，不自动发布。
+Flow Console 把商品资料导入、SPU/SKU 校验、图片处理、英文文案审核、合规材料管理、店铺草稿创建和自动化运行记录放在同一套 Windows 工作流中。项目适合需要在本地控制商品数据、素材和平台发布证据的电商团队。
 
-## 核心能力
+![Architecture](https://img.shields.io/badge/architecture-local--first-2563eb)
+![Frontend](https://img.shields.io/badge/frontend-Next.js%2016%20%7C%20React%2019-111827)
+![Backend](https://img.shields.io/badge/backend-FastAPI%20%7C%20SQLAlchemy-059669)
+![License](https://img.shields.io/badge/license-private%20project-f59e0b)
 
-- Excel 或商品文件夹导入，支持中英文字段别名和重复 SPU/SKU 更新。
-- SPU、可售 SKU、套装组件、包装图和店铺版本的完整数据校验。
-- 本地白底图流水线，以及基于 Hensun/OpenAI 兼容接口的场景图能力。
-- 图片、英文文案和整款商品三级人工审核门禁。
-- 妙手店铺同步、TEMU 草稿/发布闭环、AliExpress 草稿与 ZIP 导入包。
-- 手动运行和按时区调度的批量自动化，保留请求、外部 ID 和状态证据。
-- SQLite 本地开发；可切换 PostgreSQL、Redis/Celery 和 S3 兼容存储。
-- 当前素材存储已切换到新腾讯云 COS 桶 `flow-commerce-assets-1480282320`，公开地址仍为 `https://img.yyjds.site`；旧 COS 历史文件不迁移。
+## 能做什么
+
+- 从 Excel、商品文件夹或妙手本地格式 2 导入商品资料和图片，匹配 SPU、SKU、套装组件与包装图。
+- 用确定性图片流水线处理白底图、尺寸图和场景图，保留输入版本、哈希、任务状态和质检结果。
+- 生成并审核 TEMU、AliExpress 平台英文标题、要点和描述；审核未通过时阻止草稿创建。
+- 管理 AliExpress 包装标签、REACH 报告和其他资质文件，支持图片 OCR、PDF/PPTX 文字提取与复用。
+- 通过妙手开放平台同步店铺并创建草稿；TEMU 支持草稿、认领、库存保存、发布和权威状态核验。
+- AliExpress 支持独立的公共采集箱草稿路径，以及明确标记为 `PACKAGE_READY` 的本地 ZIP 导入包。
+- 按时区配置批量自动化任务，记录每次运行、平台、商品、外部 ID 和错误信息。
+
+## 当前边界
+
+TEMU 发布链路已包含权威状态核验。AliExpress 当前只创建草稿或本地导入包，不自动发布；真实公共采集箱接口仍应使用受控商品验证。`PACKAGE_READY` 只代表生成了可下载文件，不代表线上已创建草稿。
 
 ## 技术栈
 
 | 层级 | 技术 |
 | --- | --- |
-| Web | Next.js 16、React 19、TypeScript、Tailwind CSS 4 |
-| API | FastAPI、SQLAlchemy、Pydantic、Alembic |
-| 图片 | Pillow、OpenCV、RapidOCR、rembg/BiRefNet |
-| 数据与任务 | SQLite/PostgreSQL、进程内任务/Celery、Redis |
-| 存储 | 本地文件、S3 兼容对象存储 |
+| Web | Next.js 16、React 19、TypeScript、Tailwind CSS 4、lucide-react |
+| API | FastAPI、Uvicorn、Pydantic、SQLAlchemy 2、Alembic |
+| 数据库 | SQLite（本地默认）、PostgreSQL（部署选项） |
+| 图片与 OCR | Pillow、OpenCV、NumPy、RapidOCR、rembg/BiRefNet |
+| 异步任务 | 本地线程池、Celery、Redis |
+| 文件与对象存储 | 本地镜像、S3 兼容存储、腾讯云 COS/CDN |
+| 文档与表格 | openpyxl、pypdf、ZIP/XML 标准库解析 |
 | 外部平台 | 妙手开放平台、TEMU、AliExpress、Hensun/OpenAI 兼容图片 API |
+| 质量保障 | pytest、API 契约测试、TypeScript/ESLint、Next.js build |
+
+## 架构概览
+
+```mermaid
+flowchart LR
+    UI[Next.js 工作台] --> API[FastAPI API]
+    API --> DB[(SQLite / PostgreSQL)]
+    API --> ASSET[本地镜像 / S3 / COS]
+    API --> IMG[图片与 OCR 流水线]
+    API --> TASK[本地任务 / Celery + Redis]
+    API --> ERP[妙手开放平台]
+    ERP --> TEMU[TEMU]
+    ERP --> AE[AliExpress 草稿或导入包]
+```
 
 ## 快速开始
 
-环境要求：Windows、PowerShell、Python 3.10+、Node.js 20+。Docker 仅在使用 PostgreSQL、Redis 或 MinIO 时需要。
-
-首次安装：
+环境要求：Windows 10/11、PowerShell、Python 3.10+、Node.js 20+。首次安装：
 
 ```powershell
 .\安装环境.cmd
-```
-
-安装脚本会创建 `.venv`、安装前后端依赖、复制 `.env.example` 为根目录 `.env`，并初始化本地 SQLite 数据库。需要外部服务时，再在 `.env` 中填写对应凭据；不要提交该文件。
-
-启动与停止：
-
-```powershell
 .\启动系统.cmd
-.\停止系统.cmd
-```
-
-开发者也可以直接使用：
-
-```powershell
-.\scripts\start-dev.ps1
-.\scripts\stop-dev.ps1
 ```
 
 默认地址：
 
-- 工作台：`http://localhost:3000`
-- API：`http://127.0.0.1:8000`
-- OpenAPI 文档：`http://127.0.0.1:8000/docs`
-- 健康检查：`http://127.0.0.1:8000/health`
+| 服务 | 地址 |
+| --- | --- |
+| 工作台 | http://localhost:3000 |
+| API | http://127.0.0.1:8000 |
+| Swagger | http://127.0.0.1:8000/docs |
+| 健康检查 | http://127.0.0.1:8000/health |
+
+开发者也可以运行 `scripts\start-dev.ps1` 和 `scripts\stop-dev.ps1`。环境变量模板位于 [`apps/api/.env.example`](./apps/api/.env.example)，真实密钥只放在本机 `.env`，不要提交。
+
+## 文档导航
+
+- [接口文档](./docs/API.md)：HTTP 路由、参数、状态和典型调用顺序。
+- [开发指南](./docs/DEVELOPMENT.md)：安装、环境变量、架构、迁移、测试和排错。
+- [项目交接](./PROJECT-HANDOFF.md)：业务目标、平台验证进度、已知问题和后续工作。
+- [模块验收记录](./MODULE-1-ACCEPTANCE.md)、[模块二](./MODULE-2-ACCEPTANCE.md)、[模块三至七](./MODULES-3-7-ACCEPTANCE.md)。
 
 ## 项目结构
 
 ```text
 flow-console/
-|-- apps/
-|   |-- api/                 FastAPI、数据模型、平台适配器和测试
-|   `-- web/                 Next.js 工作台
-|-- docs/                    开发文档
-|-- outputs/                 Excel 模板、检查结果和预览产物
-|-- scripts/                 开发启停和模板维护脚本
-|-- docker-compose.yml       PostgreSQL、Redis、MinIO
-|-- PROJECT-HANDOFF.md       当前业务状态与后续验证事项
-`-- README.md
+├─ apps/api/                 FastAPI、模型、平台适配器、任务和测试
+├─ apps/web/                 Next.js 商品工作台
+├─ docs/                     开发与接口文档
+├─ scripts/                  启停、模板和维护脚本
+├─ docker-compose.yml        PostgreSQL、Redis、MinIO
+├─ PROJECT-HANDOFF.md        业务交接与验证边界
+└─ README.md
 ```
 
-## 开发与验证
-
-完整的环境变量、架构、数据库迁移、测试和排错说明见 [开发指南](./docs/DEVELOPMENT.md)。
-
-常用验证命令：
+## 验证命令
 
 ```powershell
 Set-Location apps/api
@@ -90,13 +103,14 @@ npm run lint
 npm run build
 ```
 
-模块验收记录见 [模块一](./MODULE-1-ACCEPTANCE.md)、[模块二](./MODULE-2-ACCEPTANCE.md) 和 [模块三至七](./MODULES-3-7-ACCEPTANCE.md)。当前平台衔接状态见 [项目交接](./PROJECT-HANDOFF.md)。
+## 适合写进简历的项目描述
 
-## 数据与安全边界
+**Flow Console｜电商商品智能上架工作台**
+基于 Next.js、React、TypeScript、FastAPI、SQLAlchemy 和 PostgreSQL/SQLite 构建本地优先的饰品电商运营系统，打通 Excel/文件夹商品导入、SPU/SKU 数据校验、图片处理与 OCR、英文文案审核、合规材料管理、妙手店铺同步及 TEMU/AliExpress 草稿创建流程；通过幂等键、审核门禁、任务状态机、对象存储抽象和外部 ID/响应持久化，保证批量上架过程可追踪、可重试、可审计。
 
-- `.env`、数据库、素材目录、运行日志、虚拟环境、依赖目录和本地模型均被 Git 忽略。
-- 不得虚构商品事实、材质、尺寸、重量、认证、品牌或类目属性；缺少数据时必须阻止草稿创建。
-- 异步发布请求被平台接受不等于发布成功。只有权威状态查询命中已发布结果，才能记录为 `PUBLISHED`。
-- AliExpress 当前只允许创建草稿；未经明确开发和验证，不得增加自动发布。
+## 安全与数据边界
 
-本仓库目前为私有项目，未声明开源许可证。
+- `.env`、数据库、素材、日志、依赖目录和本地模型均不进入 Git。
+- 不虚构商品材质、尺寸、重量、认证或品牌信息；缺少必需数据时阻止草稿创建。
+- 异步请求被接受不等于发布成功，只有平台权威查询命中才记录为 `PUBLISHED`。
+- 本仓库是私有项目，未声明开源许可证。

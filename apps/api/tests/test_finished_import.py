@@ -13,6 +13,11 @@ from sqlalchemy.pool import StaticPool
 from app.db import Base, get_db
 from app.main import app
 from app.models import ProductMaster
+from app.finished_import import ALIEXPRESS_CATEGORY, _weight_in_grams
+
+
+def test_aliexpress_category_matches_source_workbook() -> None:
+    assert ALIEXPRESS_CATEGORY == "珠宝饰品及配件 (Jewelry & Accessories)/流行饰品 (Fashion Jewelry)/项链 (Necklace)"
 
 
 class MemoryStorage:
@@ -24,6 +29,11 @@ class MemoryStorage:
 
     def get(self, key: str) -> bytes:
         return self.items[key]
+
+
+def test_merged_weight_column_uses_kilograms() -> None:
+    row = {"重量 KG(批量)": 0.2, "商品净重 KG(批量)": 0.1}
+    assert _weight_in_grams(row, ("重量 KG(批量)", "商品净重 KG(批量)"), ("商品净重(g)",)) == 200
 
 
 def workbook_bytes() -> bytes:
@@ -61,6 +71,22 @@ def single_sheet_workbook_bytes(
     stream = BytesIO()
     workbook.save(stream)
     return stream.getvalue()
+
+
+def test_finished_workbook_accepts_official_product_title_header() -> None:
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "商品参数"
+    sheet.append(["title"])
+    sheet.append(["note"])
+    sheet.append(["产品编号", "商品标题"])
+    sheet.append(["P-TITLE", "Official title"])
+    stream = BytesIO()
+    workbook.save(stream)
+    from app.finished_import import parse_finished_workbook
+    products, skus, legacy = parse_finished_workbook(stream.getvalue())
+    assert products == [{"产品编号": "P-TITLE", "商品标题": "Official title"}]
+    assert skus == [] and legacy is False
 
 
 def image_bytes(color: str = "white") -> bytes:
