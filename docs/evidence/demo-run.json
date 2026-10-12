@@ -1,0 +1,126 @@
+{
+  "recorded_at": "2026-10-12T15:18:12.993761+08:00",
+  "source_commit": "97ed2c04e6f30ec3e7c5e8396a7c6f10ab5360de",
+  "environment": {
+    "python": "3.12.5",
+    "os": "Windows",
+    "transport": "FastAPI TestClient / real handlers",
+    "database": "temporary SQLite file"
+  },
+  "data_scope": "synthetic fixtures, not merchant production data",
+  "passed": true,
+  "check_count": 13,
+  "checks": [
+    {
+      "check": "import 25 synthetic SPUs / 50 SKUs",
+      "method": "POST",
+      "path": "/api/imports/excel",
+      "http_status": 200,
+      "duration_ms": 121.85
+    },
+    {
+      "check": "count persisted products",
+      "method": "GET",
+      "path": "/api/overview",
+      "http_status": 200,
+      "duration_ms": 8.57
+    },
+    {
+      "check": "reimport same workbook",
+      "method": "POST",
+      "path": "/api/imports/excel",
+      "http_status": 200,
+      "duration_ms": 70.14
+    },
+    {
+      "check": "verify no duplicate SPUs or SKUs",
+      "method": "GET",
+      "path": "/api/overview",
+      "http_status": 200,
+      "duration_ms": 5.1
+    },
+    {
+      "check": "create isolated source-upload product",
+      "method": "POST",
+      "path": "/api/simple-products",
+      "http_status": 200,
+      "duration_ms": 15.31
+    },
+    {
+      "check": "reload persisted workflow",
+      "method": "GET",
+      "path": "/api/products/26/workflow",
+      "http_status": 200,
+      "duration_ms": 6.18
+    },
+    {
+      "check": "upload valid source: spu-main",
+      "method": "PUT",
+      "path": "/api/source-assets/spu-main",
+      "http_status": 200,
+      "duration_ms": 23.49
+    },
+    {
+      "check": "reload source: spu-main",
+      "method": "GET",
+      "path": "/api/products/26/workflow",
+      "http_status": 200,
+      "duration_ms": 6.5
+    },
+    {
+      "check": "upload valid source: sku-51",
+      "method": "PUT",
+      "path": "/api/source-assets/sku-51",
+      "http_status": 200,
+      "duration_ms": 13.68
+    },
+    {
+      "check": "reload source: sku-51",
+      "method": "GET",
+      "path": "/api/products/26/workflow",
+      "http_status": 200,
+      "duration_ms": 6.22
+    },
+    {
+      "check": "reject fake image bytes",
+      "method": "PUT",
+      "path": "/api/source-assets/spu-main",
+      "http_status": 422,
+      "duration_ms": 106.44
+    },
+    {
+      "check": "confirm invalid upload preserves previous asset",
+      "method": "GET",
+      "path": "/api/products/26/workflow",
+      "http_status": 200,
+      "duration_ms": 7.35
+    },
+    {
+      "check": "final persisted counts",
+      "method": "GET",
+      "path": "/api/overview",
+      "http_status": 200,
+      "duration_ms": 4.48
+    }
+  ],
+  "input": {
+    "spus": 25,
+    "skus": 50,
+    "workbook_sha256": "9e5f1f1693813a8ca5d751f8a9fc39d6a8fa1a50ef95f0158d93a88d750bd859"
+  },
+  "result": {
+    "products_after_reimport": 25,
+    "skus_after_reimport": 50,
+    "final_products": 26,
+    "final_skus": 51,
+    "source_files": 2,
+    "invalid_image_status": 422
+  },
+  "local_elapsed_ms": 570.99,
+  "external_calls": 0,
+  "limits": [
+    "No application lifespan, background jobs or network server exercised",
+    "No paid model or store API called",
+    "No production throughput or efficiency claim"
+  ]
+}

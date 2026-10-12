@@ -1,5 +1,32 @@
 # Flow Console
 
+## 项目证据与个人贡献
+
+[负责模块与关键技术决策](docs/PORTFOLIO.md) · [当前架构说明](docs/architecture-overview.md) · [持续集成](.github/workflows/ci.yml)
+
+```mermaid
+flowchart LR
+    U[Next.js / React 商品工作台] --> A[FastAPI / Pydantic]
+    A --> DB[(SQLite 默认 / PostgreSQL 可选)]
+    A --> I[SPU-SKU 导入与校验]
+    A --> P[图片处理 / OCR / 文案与审核]
+    P --> S[本地存储 / S3 / COS]
+    P -. 按需调用 .-> AI[兼容图片模型 API / 本地抠图模型]
+    A --> T[线程池默认 / Celery-Redis 可选]
+    T --> M[妙手平台适配 / 任务与外部 ID]
+    M --> TEMU[TEMU 发布与状态核验]
+    M --> AE[AliExpress 草稿 / 本地导入包]
+```
+
+### 本地运行证据
+
+[真实 API 运行记录与复现方法](docs/demo-run.md) · [机器可读结果](docs/evidence/demo-run.json)
+
+![隔离演示数据下的 Flow Console 商品工作台](docs/images/workbench.png)
+
+本次使用合成测试商品和图片，实际运行本地 API；未调用收费模型或真实店铺接口。
+
+
 > 面向女士饰品电商运营的本地商品上架工作台
 
 Flow Console 把商品资料导入、SPU/SKU 校验、图片处理、英文文案审核、合规材料管理、店铺草稿创建和自动化运行记录放在同一套 Windows 工作流中。项目适合需要在本地控制商品数据、素材和平台发布证据的电商团队。
