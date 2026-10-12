@@ -1,0 +1,12 @@
+{
+  "captured_at": "2026-10-12T07:21:01.111Z",
+  "source": "real Edge screenshot / production Next.js build / isolated seeded SQLite database",
+  "fixture": "EVIDENCE-DEMO synthetic product and synthetic image",
+  "viewport": {
+    "width": 1440,
+    "height": 1000
+  },
+  "errors": [],
+  "overflow": false,
+  "external_model_or_store_calls": 0
+}
