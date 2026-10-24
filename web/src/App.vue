@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import {
   Box,
   Upload,
@@ -29,6 +29,7 @@ const login = ref({ username: "", password: "" }),
   filter = ref(""),
   overview = ref({});
 const productPanel = ref(null);
+watch(page, () => window.scrollTo(0, 0), { flush: "post" });
 async function refresh() {
   await load();
   await productPanel.value?.refresh();
@@ -78,6 +79,7 @@ async function signIn() {
       method: "POST",
       body: login.value,
     });
+    page.value = "workbench";
     login.value.password = "";
     await load();
   } catch (e) {
@@ -182,7 +184,11 @@ onUnmounted(() => window.removeEventListener("session-expired", expired));
   </main>
   <div v-else class="shell">
     <aside class="sidebar">
-      <a class="brand" href="#" @click.prevent="page = 'workbench'"
+      <a
+        class="brand"
+        href="#"
+        aria-label="Flow Console 商品工作台"
+        @click.prevent="page = 'workbench'"
         ><el-icon><Box /></el-icon>
         <div><strong>Flow Console</strong><small>商品上架工作台</small></div></a
       ><span class="nav-label">工作空间</span>
@@ -192,6 +198,8 @@ onUnmounted(() => window.removeEventListener("session-expired", expired));
             (m) => m.id !== 'users' || user.role === 'ADMIN',
           )"
           :key="item.id"
+          :aria-label="item.name"
+          :title="item.name"
           :class="{ active: page === item.id }"
           :aria-current="page === item.id ? 'page' : undefined"
           @click="page = item.id"
