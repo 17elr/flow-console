@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, ref } from "vue";
+import { onMounted, ref, watch } from "vue";
 import { UploadFilled, Download } from "@element-plus/icons-vue";
 import { api, label } from "../api";
 defineProps({ user: Object });
@@ -11,6 +11,12 @@ const workbook = ref(null),
   result = ref(null),
   error = ref(""),
   busy = ref(false);
+watch(mode, () => {
+  workbook.value = null;
+  folder.value = [];
+  result.value = null;
+  error.value = "";
+});
 async function load() {
   try {
     history.value = await api("/api/imports");
@@ -63,6 +69,7 @@ onMounted(load);
       <h2>导入商品资料</h2>
       <el-segmented
         v-model="mode"
+        :disabled="busy"
         :options="[
           { label: 'Excel 工作簿', value: 'excel' },
           { label: '成品图 + 资料', value: 'finished-images' },
@@ -80,6 +87,7 @@ onMounted(load);
           ><input
             :key="mode"
             type="file"
+            :disabled="busy"
             :accept="mode === 'package' ? '.zip' : '.xlsx'"
             aria-label="选择导入文件"
             required
@@ -87,6 +95,7 @@ onMounted(load);
         ><label v-if="mode === 'finished-images'" class="folder-picker"
           >成品图文件夹<input
             type="file"
+            :disabled="busy"
             webkitdirectory
             multiple
             aria-label="选择成品图文件夹"

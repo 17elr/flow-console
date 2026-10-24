@@ -75,10 +75,11 @@ function latest(slot) {
     .at(-1);
 }
 let controller,
-  sequence = 0;
+  sequence = 0,
+  formProductId;
 const draftKey = (id) => `${props.user.id}:${id || "new"}`;
 function remember(id) {
-  if (Object.keys(form.value).length)
+  if (id === formProductId && Object.keys(form.value).length)
     drafts.set(draftKey(id), {
       form: JSON.parse(JSON.stringify(form.value)),
       platformJson: platformJson.value,
@@ -154,6 +155,7 @@ async function load(id = props.id, preserve = false) {
         };
       }
       if (draft?.copies) copies.value = draft.copies;
+      formProductId = id;
     }
   } catch (e) {
     if (e.name !== "AbortError" && version === sequence) {
@@ -224,6 +226,7 @@ async function save() {
   if (result) {
     drafts.delete(draftKey(props.id));
     if (props.id) await load();
+    else formProductId = undefined;
     emit("changed", result.id);
   }
 }
@@ -247,12 +250,14 @@ async function upload(event, slot, source = "FINISHED") {
   body.append("role", slot.role);
   body.append("source", source);
   if (slot.sku) body.append("sku_id", slot.sku);
-  await run(() => api("/api/source-assets", { method: "POST", body }), {
-    reload: false,
-  });
+  const result = await run(
+    () => api("/api/source-assets", { method: "POST", body }),
+    { reload: false },
+  );
+  event.target.value = "";
+  if (!result) return;
   await load(props.id, true);
   emit("changed");
-  event.target.value = "";
 }
 async function copySave(generate = false) {
   const value = currentCopy.value;
@@ -345,12 +350,13 @@ async function uploadDocument(event) {
   const body = new FormData();
   body.append("file", file);
   body.append("kind", documentKind.value);
-  await run(
+  const result = await run(
     () => api(`/api/products/${props.id}/compliance`, { method: "POST", body }),
     { reload: false },
   );
-  await load(props.id, true);
   event.target.value = "";
+  if (!result) return;
+  await load(props.id, true);
 }
 async function archive() {
   try {
