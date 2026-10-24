@@ -4,7 +4,7 @@
   "java_suites": [
     {
       "name": "com.flowconsole.CoreTest",
-      "tests": "7",
+      "tests": "8",
       "failures": "0",
       "errors": "0",
       "skipped": "0"
@@ -25,14 +25,14 @@
     },
     {
       "name": "com.flowconsole.WorkflowIT",
-      "tests": "15",
+      "tests": "16",
       "failures": "0",
       "errors": "0",
       "skipped": "0"
     }
   ],
   "web_fetch_tests": 2,
-  "browser_scenarios": 7,
+  "browser_scenarios": 8,
   "browser_widths": [
     375,
     768,

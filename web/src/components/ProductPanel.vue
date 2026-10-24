@@ -16,6 +16,7 @@ import SkuComponents from "./SkuComponents.vue";
 import ImageTools from "./ImageTools.vue";
 import LegacyHistory from "./LegacyHistory.vue";
 import PackagingLibrary from "./PackagingLibrary.vue";
+import CategoryRules from "./CategoryRules.vue";
 const props = defineProps({ id: Number, user: Object }),
   emit = defineEmits(["changed", "tasks"]);
 const detail = ref(null),
@@ -511,7 +512,8 @@ async function archive() {
                 type="textarea"
                 :rows="9"
                 aria-label="平台发布参数JSON"
-                :disabled="!editable" /></el-form-item></el-collapse-item
+                :disabled="!editable" /></el-form-item
+            ><CategoryRules /></el-collapse-item
         ></el-collapse>
         <div class="form-actions">
           <span class="muted">保存修改后，当前批准将失效。</span

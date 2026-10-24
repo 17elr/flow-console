@@ -598,6 +598,26 @@ class WorkflowIT {
   }
 
   @Test
+  void storeSynchronizationAndCategoryLookupKeepActualIdentifiers() {
+    var sync = new PlatformCatalogService(platform, db, catalog, tx);
+    @SuppressWarnings("unchecked")
+    var result = (Map<String, Object>) sync.synchronize("SEMI", operator);
+    assertEquals(1, ((Number) result.get("count")).intValue());
+    var saved =
+        db.all(store).stream()
+            .filter(s -> "fixture-synchronized-shop".equals(s.get("external_shop_id")))
+            .findFirst()
+            .orElseThrow();
+    assertEquals("SEMI", saved.get("mode"));
+    assertEquals("TEMU", saved.get("platform"));
+    var response =
+        platform.lookup(
+            "/open/v1/product/collect_box/pddkj/collect_box/get_category_attribute_rules",
+            Map.of("cid", "123"));
+    assertTrue(Json.write(response).contains("fixture-attribute-id"));
+  }
+
+  @Test
   void csrfRolesAndRevokedSessionsAreEnforced() throws Exception {
     mvc.perform(get("/api/products")).andExpect(status().isUnauthorized());
     mvc.perform(post("/api/auth/login").contentType("application/json").content("{}"))
@@ -722,7 +742,24 @@ class WorkflowIT {
               : payload;
       REMOTE.put(id, product);
       data = LOSE_RESPONSE.get() ? Map.of() : Map.of("collectBoxDetailId", id);
-    } else if (path.endsWith("get_shop_collect_item_info"))
+    } else if (path.endsWith("get_shop_list"))
+      data =
+          Map.of(
+              "list",
+              List.of(
+                  Map.of(
+                      "shopId",
+                      "fixture-synchronized-shop",
+                      "shopName",
+                      "Fixture synchronized shop",
+                      "platform",
+                      "pddkjChoice")));
+    else if (path.endsWith("get_category_attribute_rules"))
+      data =
+          Map.of(
+              "productAttributeRules",
+              List.of(Map.of("pid", "fixture-attribute-id", "name", "Actual fixture rule")));
+    else if (path.endsWith("get_shop_collect_item_info"))
       data = Map.of("shopCollectItemInfo", REMOTE.get(payload.get("detailId").toString()));
     else if (path.endsWith("save_move_collect_task")) {
       for (Object id : (List<?>) payload.get("detailIds")) PUBLISHED.add(id.toString());

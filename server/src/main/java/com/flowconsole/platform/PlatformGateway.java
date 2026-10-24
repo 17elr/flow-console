@@ -113,8 +113,7 @@ public class PlatformGateway {
         mode = Json.text(store, "mode"),
         stage = Json.text(task, "stage"),
         external = Json.text(task, "external_id");
-    String base =
-        "/open/v1/product/collect_box/" + (mode.equals("SEMI") ? "pddkj" : "pddkj_choice");
+    String base = platform.equals("TEMU") ? temuBase(mode) : "";
     String path;
     Map<String, Object> payload;
     if (verify) {
@@ -312,6 +311,20 @@ public class PlatformGateway {
       if (e instanceof InterruptedException) Thread.currentThread().interrupt();
       throw new Failure("平台请求中断或响应不可读，外部结果需要核验", !readOnly, readOnly, 0);
     }
+  }
+
+  public static String temuBase(String mode) {
+    if (!Set.of("SEMI", "FULL").contains(mode))
+      throw new ApiException(409, "INVALID_STORE_MODE", "TEMU店铺模式必须为SEMI或FULL");
+    return "/open/v1/product/collect_box/" + (mode.equals("SEMI") ? "pddkj_choice" : "pddkj");
+  }
+
+  public Map<String, Object> lookup(String path, Map<String, Object> payload) {
+    if (!env.getProperty("flow.real-publishing", Boolean.class, false))
+      throw new ApiException(409, "PUBLISHING_DISABLED", "外部平台操作默认关闭，请在获授权后配置服务端环境");
+    if (config("app-key").isBlank() || config("app-secret").isBlank())
+      throw new ApiException(409, "PLATFORM_NOT_CONFIGURED", "平台密钥未配置");
+    return redact(request(path, payload, config("account-key"), () -> {}));
   }
 
   private Map<String, Object> redact(Map<String, Object> response) {

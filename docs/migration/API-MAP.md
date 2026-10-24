@@ -29,8 +29,8 @@
 | `PUT /api/generated-assets/{asset_id}` | 保留URL | 新增登录/CSRF/角色；写入后审核失效；字段详见API-JAVA.md |
 | `DELETE /api/generated-assets/{asset_id}` | 追加版本替代 | POST /api/source-assets、PUT /api/generated-assets/{id}；历史素材不物理删除 |
 | `GET /api/miaoshou/status` | 保留URL | 新增登录/CSRF/角色；写入后审核失效；字段详见API-JAVA.md |
-| `GET /api/miaoshou/category-rules/{cid}` | 显式管理员配置 | GET /api/miaoshou/status；管理员维护已核对店铺/平台参数，不猜动态契约 |
-| `POST /api/miaoshou/stores/sync` | 显式管理员配置 | GET /api/miaoshou/status；管理员维护已核对店铺/平台参数，不猜动态契约 |
+| `GET /api/miaoshou/category-rules/{cid}` | 保留URL | 新增登录/CSRF/角色；写入后审核失效；字段详见API-JAVA.md |
+| `POST /api/miaoshou/stores/sync` | 保留URL | 新增登录/CSRF/角色；写入后审核失效；字段详见API-JAVA.md |
 | `DELETE /api/stores/{store_id}` | 保留URL | 新增登录/CSRF/角色；写入后审核失效；字段详见API-JAVA.md |
 | `GET /api/automation/overview` | 任务台替代 | /api/publish-tasks、/api/publish-batches、/api/automation/schedules；不删除历史运行证据 |
 | `POST /api/automation/schedules` | 保留URL | 新增登录/CSRF/角色；写入后审核失效；字段详见API-JAVA.md |

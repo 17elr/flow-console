@@ -33,6 +33,8 @@
 | POST `/api/imports/finished-images/auto-drafts` | 409；明确要求人工审核后创建发布批次 |
 | GET/POST `/api/stores`、PUT/DELETE `/api/stores/{id}` | 写入仅ADMIN；删除为停用；配置变化重新审核 |
 | GET `/api/miaoshou/status` | 真实开关和契约状态，不返回密钥 |
+| POST `/api/miaoshou/stores/sync?mode=SEMI` | ADMIN；真实授权店铺分页读取，模式SEMI/FULL/ALIEXPRESS；缺配置409，写配置同事务 |
+| GET `/api/miaoshou/category-rules/{cid}` | 数字末级类目ID；读取平台规则与真实枚举，不填猜测值 |
 | POST `/api/publish-batches` | 持久化后202；OPERATOR/ADMIN；不等待外部HTTP |
 | GET `/api/publish-batches`、`/{id}` | 批次及包/草稿/已确认发布/待核验/失败/跳过分别计数 |
 | GET `/api/publish-tasks`、`/{id}/attempts` | 最近300任务 / 脱敏阶段证据 |

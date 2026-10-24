@@ -14,6 +14,13 @@ import org.springframework.mock.env.MockEnvironment;
 
 class CoreTest {
   @Test
+  void temuModesMatchOriginalContract() {
+    assertEquals("/open/v1/product/collect_box/pddkj_choice", PlatformGateway.temuBase("SEMI"));
+    assertEquals("/open/v1/product/collect_box/pddkj", PlatformGateway.temuBase("FULL"));
+    assertThrows(ApiException.class, () -> PlatformGateway.temuBase("POP"));
+  }
+
+  @Test
   void exactMoneyAndInvalidAmounts() {
     assertEquals(
         new BigDecimal("9999999999999999.12345678"),

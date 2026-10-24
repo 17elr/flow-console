@@ -163,6 +163,22 @@ public class LegacyImporter implements ApplicationRunner {
                         "id", "name", "platform", "mode", "currency", "external_shop_id", "active"))
                   p.put(k, old.get(k));
                 p.put("account_key", "legacy-shared-account");
+                String platform =
+                    Objects.toString(old.get("platform"), "").toUpperCase(Locale.ROOT);
+                if (platform.contains("ALI") || platform.equals("速卖通")) {
+                  p.put("platform", "ALIEXPRESS");
+                  p.put("mode", "ALIEXPRESS");
+                } else if (platform.equals("TEMU")) {
+                  String mode = Objects.toString(old.get("mode"), "").toUpperCase(Locale.ROOT);
+                  if (Set.of("半托管", "HALF", "SEMI", "PDDKJCHOICE").contains(mode))
+                    p.put("mode", "SEMI");
+                  else if (Set.of("全托管", "FULL", "PDDKJ").contains(mode)) p.put("mode", "FULL");
+                  else if (Boolean.TRUE.equals(old.get("active"))
+                      || Json.text(old, "active").equals("1"))
+                    throw new IllegalArgumentException(
+                        "Unknown active legacy TEMU mode; preserve source and resolve explicitly");
+                  else p.put("active", false);
+                }
                 p.put("content_json", Json.write(old));
                 db.insert(store, p);
                 mapping("stores", old, "store", Json.id(p.get("id")));

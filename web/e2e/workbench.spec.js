@@ -299,6 +299,21 @@ test("responsive workbench and screenshot evidence", async ({ page }) => {
   ).toBeVisible();
 });
 
+test("platform catalog controls report disabled access without guessing shops or category rules", async ({page}) => {
+  await login(page);
+  await page.getByRole("button",{name:"店铺配置",exact:true}).click();
+  await page.getByRole("button",{name:"读取并同步店铺",exact:true}).click();
+  await expect(page.getByRole("alert").filter({hasText:"外部平台操作默认关闭"})).toBeVisible();
+  await page.getByRole("button",{name:"商品工作台",exact:false}).click();
+  await page.getByPlaceholder("搜索名称或货号").fill(`BROWSER-${suffix}`);
+  await page.getByRole("button",{name:new RegExp(`BROWSER-${suffix}`)}).click();
+  await page.getByRole("button",{name:"平台发布参数（经核对的接口参数）"}).click();
+  await page.getByLabel("TEMU类目ID",{exact:true}).fill("123");
+  await page.getByRole("button",{name:"读取类目规则",exact:true}).click();
+  await expect(page.getByRole("alert").filter({hasText:"外部平台操作默认关闭"})).toBeVisible();
+  await expect(page.getByLabel("TEMU类目ID",{exact:true})).toHaveValue("123");
+});
+
 test("partial workbook import reports row errors and opens the valid product", async ({
   page,
 }) => {

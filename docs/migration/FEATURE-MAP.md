@@ -14,7 +14,7 @@
 | 英文文案 | listing_copy与事实模板/人工编辑 | 文案版本变化重审；未声明LLM |
 | 人工审核 | 内容版本+稳定指纹 | 角色与最后修改人隔离；变更失效，发布保存不可变快照 |
 | 店铺与模式 | store、AdminPanel | ADMIN写配置，保存即使批准失效；保留原授权ID |
-| 店铺同步/类目规则 | 原妙手契约保留参考，管理员输入当前验证值 | 自动同步不作为新默认入口；不猜类目及枚举；真实契约仍需授权验证 |
+| 店铺同步/类目规则 | PlatformCatalogService、管理员同步入口、类目规则查询 | 保留原妙手读取路径及全/半托管映射；不猜类目及枚举；默认关闭真实调用 |
 | TEMU建稿/认领/库存/发布 | PlatformGateway分阶段+TaskExecutor | 本地假平台全链路测试；实际发布默认禁用 |
 | AliExpress在线草稿 | 独立配置路径和分支 | 不走TEMU接口，契约缺失409；不支持自动发布 |
 | AliExpress本地格式2包 | PackageService、认证下载 | 保留图片、SKU、包装与manifest；PACKAGE_READY单独计数 |

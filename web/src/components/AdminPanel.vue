@@ -20,6 +20,25 @@ const store = ref({
   active: true,
 });
 const member = ref({ username: "", password: "", role: "OPERATOR" });
+const syncMode = ref("SEMI"),
+  syncResult = ref(null);
+async function synchronize() {
+  busy.value = true;
+  error.value = "";
+  syncResult.value = null;
+  try {
+    syncResult.value = await api(
+      `/api/miaoshou/stores/sync?mode=${syncMode.value}`,
+      { method: "POST" },
+    );
+    await load();
+    emit("changed");
+  } catch (e) {
+    error.value = e.message;
+  } finally {
+    busy.value = false;
+  }
+}
 async function load() {
   error.value = "";
   try {
@@ -138,6 +157,33 @@ onMounted(load);
       </p>
       <small>密钥仅保存在服务端环境中，浏览器不会接收密钥。</small>
     </div>
+    <section v-if="user.role === 'ADMIN'" class="panel padded">
+      <div class="section-heading">
+        <div>
+          <h2>同步真实授权店铺</h2>
+          <p class="muted">
+            从平台读取店铺ID和名称；配置变化后商品需要重新审核。
+          </p>
+        </div>
+      </div>
+      <div class="inline-controls">
+        <el-select v-model="syncMode" aria-label="店铺同步模式"
+          ><el-option label="TEMU 半托管" value="SEMI" /><el-option
+            label="TEMU 全托管"
+            value="FULL" /><el-option
+            label="AliExpress"
+            value="ALIEXPRESS" /></el-select
+        ><el-button type="primary" :loading="busy" @click="synchronize"
+          >读取并同步店铺</el-button
+        >
+      </div>
+      <el-alert
+        v-if="syncResult"
+        :title="`已同步 ${syncResult.count} 个授权店铺`"
+        type="success"
+        :closable="false"
+      />
+    </section>
     <div class="admin-layout">
       <section class="panel padded">
         <h2>已配置店铺</h2>

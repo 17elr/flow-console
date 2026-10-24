@@ -26,6 +26,8 @@ java -jar server/target/flow-console-2.0.0.jar --spring.profiles.active=migratio
 
 先校验每个JSONL的行数及哈希、全部文件哈希和外键检查，再按关系导入。产品、SKU、组件、店铺保留原ID；素材、SKU绑定、文案、包装选择、审核和历史外部结果保存映射。重复导入同manifest不重复写入，非空新目标拒绝覆盖。
 
+迁移会规范化TEMU全/半托管和AliExpress的历史模式名，原值仍保留在content_json及legacy_record。未知的有效店铺模式会中止导入，已停用的无授权占位店铺维持停用，不猜测发布路径。
+
 所有旧字段另保存在原表JSON中。旧自动确认标记`LEGACY_AUTO_APPROVED`，没有可验证身份的旧人工记录标记`LEGACY_REVIEW_UNVERIFIED`；不编造审核人，重新人工审核。旧任务与计划不自动恢复执行，原运行记录保留归档；新每日计划需要管理员明确建立或启用。
 
 历史外部ID与原状态保存在`legacy_external`。没有新权威核验前统一`HISTORICAL_UNVERIFIED`，有重复上架风险的记录阻止新建线上任务。人工查清真实ID后只能查询权威状态，不能直接点击“标记成功”。

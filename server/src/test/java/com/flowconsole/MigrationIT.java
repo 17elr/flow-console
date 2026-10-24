@@ -81,7 +81,7 @@ class MigrationIT {
                 "platform",
                 "TEMU",
                 "mode",
-                "SEMI",
+                "半托管",
                 "currency",
                 "USD",
                 "external_shop_id",
@@ -221,6 +221,11 @@ class MigrationIT {
       try (var result = statement.executeQuery("SELECT COUNT(*) FROM publish_task")) {
         result.next();
         assertEquals(0, result.getInt(1));
+      }
+      try (var result = statement.executeQuery("SELECT platform,mode FROM store WHERE id=3")) {
+        result.next();
+        assertEquals("TEMU", result.getString(1));
+        assertEquals("SEMI", result.getString(2));
       }
     }
     var report = Json.map(Files.readString(root.resolve("mysql-validation-" + database + ".json")));
