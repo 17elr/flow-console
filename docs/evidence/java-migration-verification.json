@@ -32,7 +32,7 @@
     }
   ],
   "web_fetch_tests": 2,
-  "browser_scenarios": 8,
+  "browser_scenarios": 9,
   "browser_widths": [
     375,
     768,
