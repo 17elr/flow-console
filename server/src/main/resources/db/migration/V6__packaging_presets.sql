@@ -1,0 +1,7 @@
+CREATE TABLE packaging_preset (
+ id BIGINT PRIMARY KEY AUTO_INCREMENT, slot INT NOT NULL, version BIGINT NOT NULL,
+ storage_key VARCHAR(255) NOT NULL, sha256 CHAR(64) NOT NULL, mime_type VARCHAR(80) NOT NULL,
+ width INT NOT NULL, height INT NOT NULL, byte_size BIGINT NOT NULL, original_filename VARCHAR(255),
+ active BOOLEAN NOT NULL DEFAULT TRUE, metadata_json JSON NOT NULL,
+ created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6), UNIQUE(slot,version)
+);

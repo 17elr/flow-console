@@ -1,0 +1,202 @@
+{
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/products/{product_id}/compliance": [
+      "get"
+    ],
+    "/api/compliance-library": [
+      "get"
+    ],
+    "/api/products/{product_id}/compliance/{kind}/reuse/{asset_id}": [
+      "post"
+    ],
+    "/api/products/{product_id}/compliance/{kind}": [
+      "put"
+    ],
+    "/api/products/{product_id}/compliance/files/{asset_id}": [
+      "get",
+      "delete"
+    ],
+    "/health": [
+      "get"
+    ],
+    "/api/overview": [
+      "get"
+    ],
+    "/api/products": [
+      "get"
+    ],
+    "/api/products/{product_id}": [
+      "get",
+      "delete",
+      "patch"
+    ],
+    "/api/products/bulk-delete": [
+      "post"
+    ],
+    "/api/simple-products": [
+      "post"
+    ],
+    "/api/products/{product_id}/workflow": [
+      "get"
+    ],
+    "/api/products/{product_id}/listing-copies": [
+      "post"
+    ],
+    "/api/listing-copies/{copy_id}": [
+      "put"
+    ],
+    "/api/reviews/images/{asset_id}": [
+      "put"
+    ],
+    "/api/products/{product_id}/review": [
+      "put"
+    ],
+    "/api/source-assets/{slot}": [
+      "put"
+    ],
+    "/api/source-assets/{asset_id}": [
+      "delete"
+    ],
+    "/api/products/{product_id}/generate-all": [
+      "post"
+    ],
+    "/api/generated-assets/{asset_id}": [
+      "put",
+      "delete"
+    ],
+    "/api/miaoshou/status": [
+      "get"
+    ],
+    "/api/miaoshou/category-rules/{cid}": [
+      "get"
+    ],
+    "/api/miaoshou/stores/sync": [
+      "post"
+    ],
+    "/api/stores/{store_id}": [
+      "delete"
+    ],
+    "/api/automation/overview": [
+      "get"
+    ],
+    "/api/automation/schedules": [
+      "post"
+    ],
+    "/api/automation/schedules/{schedule_id}": [
+      "patch",
+      "delete"
+    ],
+    "/api/automation/stores/{store_id}": [
+      "put"
+    ],
+    "/api/automation/runs": [
+      "post",
+      "get"
+    ],
+    "/api/automation/runs/{run_id}": [
+      "delete"
+    ],
+    "/api/products/{product_id}/miaoshou-drafts": [
+      "post"
+    ],
+    "/api/products/{product_id}/aliexpress-import-package": [
+      "post"
+    ],
+    "/api/miaoshou-drafts/{draft_id}/package": [
+      "get"
+    ],
+    "/api/skus/{sku_id}": [
+      "patch"
+    ],
+    "/api/skus/{sku_id}/components": [
+      "post"
+    ],
+    "/api/components/{component_id}": [
+      "delete"
+    ],
+    "/api/source-assets": [
+      "post"
+    ],
+    "/api/image-provider/status": [
+      "get"
+    ],
+    "/api/scene-templates": [
+      "get"
+    ],
+    "/api/products/{product_id}/scene-profile": [
+      "get",
+      "patch"
+    ],
+    "/api/products/{product_id}/scene-batches": [
+      "post"
+    ],
+    "/api/scene-batches": [
+      "get"
+    ],
+    "/api/scene-batches/{batch_id}": [
+      "get"
+    ],
+    "/api/scene-jobs/{job_id}/retry": [
+      "post"
+    ],
+    "/api/products/{product_id}/image-readiness": [
+      "get"
+    ],
+    "/api/products/{product_id}/image-batches": [
+      "post"
+    ],
+    "/api/image-batches": [
+      "get"
+    ],
+    "/api/image-batches/{batch_id}": [
+      "get"
+    ],
+    "/api/image-jobs/{job_id}/retry": [
+      "post"
+    ],
+    "/api/assets/{asset_id}/content": [
+      "get"
+    ],
+    "/api/products/{product_id}/listings": [
+      "post"
+    ],
+    "/api/stores": [
+      "get"
+    ],
+    "/api/imports": [
+      "get"
+    ],
+    "/api/imports/excel": [
+      "post"
+    ],
+    "/api/imports/package": [
+      "post"
+    ],
+    "/api/imports/finished-images": [
+      "post"
+    ],
+    "/api/imports/finished-images/auto-drafts": [
+      "post"
+    ],
+    "/api/packaging-presets": [
+      "get"
+    ],
+    "/api/packaging-presets/{slot}": [
+      "put",
+      "delete"
+    ],
+    "/api/packaging-presets/{slot}/content": [
+      "get"
+    ],
+    "/api/products/{product_id}/packaging-selection": [
+      "put"
+    ],
+    "/api/products/packaging-selection/bulk": [
+      "put"
+    ],
+    "/api/imports/template": [
+      "get"
+    ]
+  }
+}

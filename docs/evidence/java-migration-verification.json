@@ -1,0 +1,78 @@
+{
+  "date": "2026-10-24",
+  "baseline": "3bc056c375391cdabfd6002246aa3f2485a742ff",
+  "java_suites": [
+    {
+      "name": "com.flowconsole.CoreTest",
+      "tests": "8",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0"
+    },
+    {
+      "name": "com.flowconsole.HttpSafetyTest",
+      "tests": "2",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0"
+    },
+    {
+      "name": "com.flowconsole.MigrationIT",
+      "tests": "1",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0"
+    },
+    {
+      "name": "com.flowconsole.WorkflowIT",
+      "tests": "16",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0"
+    }
+  ],
+  "web_fetch_tests": 2,
+  "browser_scenarios": 9,
+  "browser_widths": [
+    375,
+    768,
+    1440
+  ],
+  "migration_tool_tests": 2,
+  "compute_protocol_tests": 2,
+  "legacy_regression_tests": 56,
+  "real_platform_calls": 0,
+  "paid_model_calls": 0,
+  "platform_fixtures": "local HTTP fake server",
+  "migration": {
+    "approval_reset": true,
+    "archived_rows": 969,
+    "exact_amount_checks": 96,
+    "external_calls": 0,
+    "legacy_external_records": 16,
+    "recovered_by_exact_sha256": [
+      "asset_versions:28",
+      "asset_versions:56"
+    ],
+    "replayed_tasks": 0,
+    "source_rows": 969,
+    "source_untouched": true,
+    "unresolved": [],
+    "verified_files": 542
+  },
+  "rollback": {
+    "status": "PASSED",
+    "scope": "read-only snapshot restoration check; no production cutover",
+    "tables": 22,
+    "rows": 969,
+    "files": 542,
+    "source_writes": 0,
+    "external_calls": 0
+  },
+  "limits": [
+    "No real store publication or paid model calls",
+    "OCR/BiRefNet actual model quality not evaluated",
+    "Local runtime JDK23 compiles release17; CI runs Temurin17",
+    "Local machine has no Docker; Compose images checked in GitHub CI"
+  ]
+}

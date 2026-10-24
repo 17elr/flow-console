@@ -1,0 +1,85 @@
+name: Java and Vue verification
+on: [push, pull_request, workflow_dispatch]
+permissions: {contents: read}
+jobs:
+  images:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compose configuration
+        run: docker compose --env-file .env.example config --quiet
+      - name: Build Java and Vue containers
+        run: docker compose --env-file .env.example build api web
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      mysql:
+        image: mysql:8.0.44
+        env:
+          MYSQL_ROOT_PASSWORD: flow-ci-database-password
+          MYSQL_DATABASE: flow_test_ci
+        ports: [13316:3306]
+        options: --health-cmd="mysqladmin ping -h 127.0.0.1 -pflow-ci-database-password" --health-interval=5s --health-timeout=5s --health-retries=30
+      redis:
+        image: redis:7.4.11-alpine
+        ports: [16376:6379]
+        options: --health-cmd="redis-cli ping" --health-interval=5s --health-timeout=3s --health-retries=20
+      rabbitmq:
+        image: rabbitmq:4.3.7-alpine
+        env:
+          RABBITMQ_DEFAULT_USER: flow_ci
+          RABBITMQ_DEFAULT_PASS: flow-ci-broker-password
+        ports: [15676:5672]
+        options: --health-cmd="rabbitmq-diagnostics -q ping" --health-interval=5s --health-timeout=5s --health-retries=30
+    env:
+      RUN_INTEGRATION: 'true'
+      IT_DB_URL: jdbc:mysql://127.0.0.1:13316/flow_test_ci?connectionTimeZone=UTC
+      IT_DB_USER: root
+      IT_DB_PASSWORD: flow-ci-database-password
+      IT_RABBIT_USER: flow_ci
+      IT_RABBIT_PASSWORD: flow-ci-broker-password
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '17', cache: maven, cache-dependency-path: server/pom.xml}
+      - uses: actions/setup-node@v4
+        with: {node-version: '24', cache: npm, cache-dependency-path: web/package-lock.json}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Java unit and real service integration tests
+        run: mvn -B -f server/pom.xml verify
+      - name: Migration export invariants
+        run: python -m unittest discover -s migration -p 'test_*.py'
+      - name: Optional compute protocol checks
+        run: pip install -r compute-adapter/requirements.txt httpx && python -m unittest discover -s compute-adapter -p 'test_*.py'
+      - name: Vue fetch checks and build
+        run: cd web && npm ci && npm test && npm run build
+      - name: Browser runtime
+        run: cd web && npx playwright install --with-deps chromium
+      - name: Start isolated browser API
+        env:
+          DB_URL: jdbc:mysql://127.0.0.1:13316/flow_test_ci?connectionTimeZone=UTC
+          DB_USER: root
+          DB_PASSWORD: flow-ci-database-password
+          RABBIT_USER: flow_ci
+          RABBIT_PASSWORD: flow-ci-broker-password
+          SCHEDULERS_ENABLED: 'false'
+          REAL_PUBLISHING_ENABLED: 'false'
+          ASSET_ROOT: server/target/it-assets
+        run: |
+          mkdir -p .runtime
+          java -jar server/target/flow-console-2.0.0.jar > .runtime/browser-api.log 2>&1 &
+      - name: Browser acceptance
+        run: cd web && npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: verification-evidence
+          path: |
+            server/target/surefire-reports/
+            server/target/failsafe-reports/
+            web/test-results/
+            web/playwright-report/
+            .runtime/browser-api.log

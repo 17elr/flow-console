@@ -43,3 +43,13 @@ repaired.xlsx
 Thumbs.db
 .idea/
 .vscode/
+
+# Java/Vue migration runtime
+**/target/
+web/dist/
+server/data/
+compute-adapter/cache/
+erl_crash.dump
+web/test-results/
+web/playwright-report/
+/data/

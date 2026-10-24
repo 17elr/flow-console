@@ -1,0 +1,83 @@
+server:
+  address: ${BIND_ADDRESS:127.0.0.1}
+  port: ${PORT:8000}
+  servlet:
+    session:
+      timeout: 30m
+      cookie:
+        http-only: true
+        same-site: lax
+        secure: ${COOKIE_SECURE:false}
+spring:
+  profiles:
+    default: api
+  datasource:
+    url: ${DB_URL:jdbc:mysql://127.0.0.1:13316/flow_console?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true}
+    username: ${DB_USER:flow}
+    password: ${DB_PASSWORD:}
+    hikari:
+      maximum-pool-size: 10
+  servlet:
+    multipart:
+      max-file-size: 30MB
+      max-request-size: 160MB
+  jackson:
+    deserialization:
+      use-big-decimal-for-floats: true
+  rabbitmq:
+    host: ${RABBIT_HOST:127.0.0.1}
+    port: ${RABBIT_PORT:15676}
+    username: ${RABBIT_USER:flow}
+    password: ${RABBIT_PASSWORD:}
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    template:
+      mandatory: true
+    listener:
+      simple:
+        acknowledge-mode: manual
+        concurrency: 2
+        max-concurrency: 2
+        prefetch: 1
+        default-requeue-rejected: false
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:16376}
+      password: ${REDIS_PASSWORD:}
+      timeout: 2s
+mybatis:
+  configuration:
+    call-setters-on-nulls: true
+flow:
+  assets: ${ASSET_ROOT:./data/assets}
+  real-publishing: ${REAL_PUBLISHING_ENABLED:false}
+  platform-base: ${MIAOSHOU_BASE_URL:https://openapi-erp.91miaoshou.com}
+  app-key: ${MIAOSHOU_APP_KEY:}
+  app-secret: ${MIAOSHOU_APP_SECRET:}
+  account-key: ${MIAOSHOU_ACCOUNT_KEY:default}
+  public-assets: ${PUBLIC_ASSET_BASE_URL:}
+  aliexpress-create-path: ${MIAOSHOU_PUBLIC_COLLECT_CREATE_PATH:}
+  aliexpress-query-path: ${MIAOSHOU_PUBLIC_COLLECT_QUERY_PATH:}
+  rate-prefix: ${RATE_PREFIX:flow:rate:}
+  interval-ms: ${PLATFORM_INTERVAL_MS:1200}
+  bootstrap-password: ${BOOTSTRAP_ADMIN_PASSWORD:}
+  compute-url: ${COMPUTE_URL:}
+  compute-token: ${COMPUTE_TOKEN:}
+  schedulers: ${SCHEDULERS_ENABLED:true}
+---
+spring:
+  config:
+    activate:
+      on-profile: worker
+  main:
+    web-application-type: none
+---
+spring:
+  config:
+    activate:
+      on-profile: migration
+  main:
+    web-application-type: none
+  flyway:
+    enabled: false

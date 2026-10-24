@@ -1,0 +1,538 @@
+{
+  "source_commit": "3bc056c375391cdabfd6002246aa3f2485a742ff",
+  "endpoints": [
+    {
+      "method": "GET",
+      "path": "/api/products/{product_id}/compliance",
+      "file": "apps/api/app/compliance.py",
+      "handler": "list_files"
+    },
+    {
+      "method": "GET",
+      "path": "/api/compliance-library",
+      "file": "apps/api/app/compliance.py",
+      "handler": "library"
+    },
+    {
+      "method": "POST",
+      "path": "/api/products/{product_id}/compliance/{kind}/reuse/{asset_id}",
+      "file": "apps/api/app/compliance.py",
+      "handler": "reuse"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/products/{product_id}/compliance/{kind}",
+      "file": "apps/api/app/compliance.py",
+      "handler": "upload"
+    },
+    {
+      "method": "GET",
+      "path": "/api/products/{product_id}/compliance/files/{asset_id}",
+      "file": "apps/api/app/compliance.py",
+      "handler": "content"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/products/{product_id}/compliance/files/{asset_id}",
+      "file": "apps/api/app/compliance.py",
+      "handler": "delete"
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "file": "apps/api/app/main.py",
+      "handler": "health"
+    },
+    {
+      "method": "GET",
+      "path": "/api/overview",
+      "file": "apps/api/app/main.py",
+      "handler": "overview"
+    },
+    {
+      "method": "GET",
+      "path": "/api/products",
+      "file": "apps/api/app/main.py",
+      "handler": "products"
+    },
+    {
+      "method": "GET",
+      "path": "/api/products/{product_id}",
+      "file": "apps/api/app/main.py",
+      "handler": "product_detail"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/products/{product_id}",
+      "file": "apps/api/app/main.py",
+      "handler": "delete_product"
+    },
+    {
+      "method": "POST",
+      "path": "/api/products/bulk-delete",
+      "file": "apps/api/app/main.py",
+      "handler": "bulk_delete_products"
+    },
+    {
+      "method": "POST",
+      "path": "/api/simple-products",
+      "file": "apps/api/app/main.py",
+      "handler": "save_simple_product"
+    },
+    {
+      "method": "GET",
+      "path": "/api/products/{product_id}/workflow",
+      "file": "apps/api/app/main.py",
+      "handler": "simple_product_workflow"
+    },
+    {
+      "method": "POST",
+      "path": "/api/products/{product_id}/listing-copies",
+      "file": "apps/api/app/main.py",
+      "handler": "generate_listing_copies"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/listing-copies/{copy_id}",
+      "file": "apps/api/app/main.py",
+      "handler": "save_listing_copy"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/reviews/images/{asset_id}",
+      "file": "apps/api/app/main.py",
+      "handler": "review_generated_image"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/products/{product_id}/review",
+      "file": "apps/api/app/main.py",
+      "handler": "review_product"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/source-assets/{slot}",
+      "file": "apps/api/app/main.py",
+      "handler": "replace_source_slot"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/source-assets/{asset_id}",
+      "file": "apps/api/app/main.py",
+      "handler": "delete_source_asset"
+    },
+    {
+      "method": "POST",
+      "path": "/api/products/{product_id}/generate-all",
+      "file": "apps/api/app/main.py",
+      "handler": "generate_all"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/generated-assets/{asset_id}",
+      "file": "apps/api/app/main.py",
+      "handler": "replace_generated_asset"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/generated-assets/{asset_id}",
+      "file": "apps/api/app/main.py",
+      "handler": "delete_generated_asset"
+    },
+    {
+      "method": "GET",
+      "path": "/api/miaoshou/status",
+      "file": "apps/api/app/main.py",
+      "handler": "miaoshou_status"
+    },
+    {
+      "method": "GET",
+      "path": "/api/miaoshou/category-rules/{cid}",
+      "file": "apps/api/app/main.py",
+      "handler": "miaoshou_category_rules"
+    },
+    {
+      "method": "POST",
+      "path": "/api/miaoshou/stores/sync",
+      "file": "apps/api/app/main.py",
+      "handler": "sync_miaoshou_stores"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/stores/{store_id}",
+      "file": "apps/api/app/main.py",
+      "handler": "deactivate_store"
+    },
+    {
+      "method": "GET",
+      "path": "/api/automation/overview",
+      "file": "apps/api/app/main.py",
+      "handler": "automation_overview"
+    },
+    {
+      "method": "POST",
+      "path": "/api/automation/schedules",
+      "file": "apps/api/app/main.py",
+      "handler": "create_automation_schedule"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/automation/schedules/{schedule_id}",
+      "file": "apps/api/app/main.py",
+      "handler": "update_automation_schedule"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/automation/schedules/{schedule_id}",
+      "file": "apps/api/app/main.py",
+      "handler": "delete_automation_schedule"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/automation/stores/{store_id}",
+      "file": "apps/api/app/main.py",
+      "handler": "update_store_automation"
+    },
+    {
+      "method": "POST",
+      "path": "/api/automation/runs",
+      "file": "apps/api/app/main.py",
+      "handler": "start_automation_run"
+    },
+    {
+      "method": "GET",
+      "path": "/api/automation/runs",
+      "file": "apps/api/app/main.py",
+      "handler": "list_automation_runs"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/automation/runs/{run_id}",
+      "file": "apps/api/app/main.py",
+      "handler": "delete_automation_run"
+    },
+    {
+      "method": "POST",
+      "path": "/api/products/{product_id}/miaoshou-drafts",
+      "file": "apps/api/app/main.py",
+      "handler": "create_miaoshou_drafts"
+    },
+    {
+      "method": "POST",
+      "path": "/api/products/{product_id}/aliexpress-import-package",
+      "file": "apps/api/app/main.py",
+      "handler": "create_aliexpress_import_package"
+    },
+    {
+      "method": "GET",
+      "path": "/api/miaoshou-drafts/{draft_id}/package",
+      "file": "apps/api/app/main.py",
+      "handler": "download_miaoshou_package"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/products/{product_id}",
+      "file": "apps/api/app/main.py",
+      "handler": "update_product"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/skus/{sku_id}",
+      "file": "apps/api/app/main.py",
+      "handler": "update_sku"
+    },
+    {
+      "method": "POST",
+      "path": "/api/skus/{sku_id}/components",
+      "file": "apps/api/app/main.py",
+      "handler": "add_component"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/components/{component_id}",
+      "file": "apps/api/app/main.py",
+      "handler": "delete_component"
+    },
+    {
+      "method": "POST",
+      "path": "/api/source-assets",
+      "file": "apps/api/app/main.py",
+      "handler": "upload_source_asset"
+    },
+    {
+      "method": "GET",
+      "path": "/api/image-provider/status",
+      "file": "apps/api/app/main.py",
+      "handler": "image_provider_status"
+    },
+    {
+      "method": "GET",
+      "path": "/api/scene-templates",
+      "file": "apps/api/app/main.py",
+      "handler": "scene_templates"
+    },
+    {
+      "method": "GET",
+      "path": "/api/products/{product_id}/scene-profile",
+      "file": "apps/api/app/main.py",
+      "handler": "get_scene_profile"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/products/{product_id}/scene-profile",
+      "file": "apps/api/app/main.py",
+      "handler": "patch_scene_profile"
+    },
+    {
+      "method": "POST",
+      "path": "/api/products/{product_id}/scene-batches",
+      "file": "apps/api/app/main.py",
+      "handler": "create_scene_batch"
+    },
+    {
+      "method": "GET",
+      "path": "/api/scene-batches",
+      "file": "apps/api/app/main.py",
+      "handler": "scene_batches"
+    },
+    {
+      "method": "GET",
+      "path": "/api/scene-batches/{batch_id}",
+      "file": "apps/api/app/main.py",
+      "handler": "scene_batch_detail"
+    },
+    {
+      "method": "POST",
+      "path": "/api/scene-jobs/{job_id}/retry",
+      "file": "apps/api/app/main.py",
+      "handler": "retry_scene_job"
+    },
+    {
+      "method": "GET",
+      "path": "/api/products/{product_id}/image-readiness",
+      "file": "apps/api/app/main.py",
+      "handler": "product_image_readiness"
+    },
+    {
+      "method": "POST",
+      "path": "/api/products/{product_id}/image-batches",
+      "file": "apps/api/app/main.py",
+      "handler": "create_image_batch"
+    },
+    {
+      "method": "GET",
+      "path": "/api/image-batches",
+      "file": "apps/api/app/main.py",
+      "handler": "image_batches"
+    },
+    {
+      "method": "GET",
+      "path": "/api/image-batches/{batch_id}",
+      "file": "apps/api/app/main.py",
+      "handler": "image_batch_detail"
+    },
+    {
+      "method": "POST",
+      "path": "/api/image-jobs/{job_id}/retry",
+      "file": "apps/api/app/main.py",
+      "handler": "retry_image_job"
+    },
+    {
+      "method": "GET",
+      "path": "/api/assets/{asset_id}/content",
+      "file": "apps/api/app/main.py",
+      "handler": "asset_content"
+    },
+    {
+      "method": "POST",
+      "path": "/api/products/{product_id}/listings",
+      "file": "apps/api/app/main.py",
+      "handler": "add_listing"
+    },
+    {
+      "method": "GET",
+      "path": "/api/stores",
+      "file": "apps/api/app/main.py",
+      "handler": "stores"
+    },
+    {
+      "method": "GET",
+      "path": "/api/imports",
+      "file": "apps/api/app/main.py",
+      "handler": "imports"
+    },
+    {
+      "method": "POST",
+      "path": "/api/imports/excel",
+      "file": "apps/api/app/main.py",
+      "handler": "import_excel"
+    },
+    {
+      "method": "POST",
+      "path": "/api/imports/package",
+      "file": "apps/api/app/main.py",
+      "handler": "import_local_package"
+    },
+    {
+      "method": "POST",
+      "path": "/api/imports/finished-images",
+      "file": "apps/api/app/main.py",
+      "handler": "import_finished_images"
+    },
+    {
+      "method": "POST",
+      "path": "/api/imports/finished-images/auto-drafts",
+      "file": "apps/api/app/main.py",
+      "handler": "retry_finished_image_drafts"
+    },
+    {
+      "method": "GET",
+      "path": "/api/packaging-presets",
+      "file": "apps/api/app/main.py",
+      "handler": "list_packaging_presets"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/packaging-presets/{slot}",
+      "file": "apps/api/app/main.py",
+      "handler": "save_packaging_preset"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/packaging-presets/{slot}",
+      "file": "apps/api/app/main.py",
+      "handler": "delete_packaging_preset"
+    },
+    {
+      "method": "GET",
+      "path": "/api/packaging-presets/{slot}/content",
+      "file": "apps/api/app/main.py",
+      "handler": "packaging_preset_content"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/products/{product_id}/packaging-selection",
+      "file": "apps/api/app/main.py",
+      "handler": "save_product_packaging"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/products/packaging-selection/bulk",
+      "file": "apps/api/app/main.py",
+      "handler": "save_bulk_product_packaging"
+    },
+    {
+      "method": "GET",
+      "path": "/api/imports/template",
+      "file": "apps/api/app/main.py",
+      "handler": "download_template"
+    }
+  ],
+  "models": [
+    {
+      "class": "ImportBatch",
+      "table": "import_batches",
+      "file": "apps/api/app/models.py"
+    },
+    {
+      "class": "ProductMaster",
+      "table": "products",
+      "file": "apps/api/app/models.py"
+    },
+    {
+      "class": "SkuVariant",
+      "table": "sku_variants",
+      "file": "apps/api/app/models.py"
+    },
+    {
+      "class": "SkuComponent",
+      "table": "sku_components",
+      "file": "apps/api/app/models.py"
+    },
+    {
+      "class": "Asset",
+      "table": "assets",
+      "file": "apps/api/app/models.py"
+    },
+    {
+      "class": "ImageBatch",
+      "table": "image_batches",
+      "file": "apps/api/app/models.py"
+    },
+    {
+      "class": "ImageJob",
+      "table": "image_jobs",
+      "file": "apps/api/app/models.py"
+    },
+    {
+      "class": "AssetVersion",
+      "table": "asset_versions",
+      "file": "apps/api/app/models.py"
+    },
+    {
+      "class": "SkuAsset",
+      "table": "sku_assets",
+      "file": "apps/api/app/models.py"
+    },
+    {
+      "class": "PackagingPreset",
+      "table": "packaging_presets",
+      "file": "apps/api/app/models.py"
+    },
+    {
+      "class": "ProductPackagingSelection",
+      "table": "product_packaging_selections",
+      "file": "apps/api/app/models.py"
+    },
+    {
+      "class": "SceneProfile",
+      "table": "scene_profiles",
+      "file": "apps/api/app/models.py"
+    },
+    {
+      "class": "Store",
+      "table": "stores",
+      "file": "apps/api/app/models.py"
+    },
+    {
+      "class": "StoreListing",
+      "table": "store_listings",
+      "file": "apps/api/app/models.py"
+    },
+    {
+      "class": "MiaoshouDraft",
+      "table": "miaoshou_drafts",
+      "file": "apps/api/app/models.py"
+    },
+    {
+      "class": "ListingCopy",
+      "table": "listing_copies",
+      "file": "apps/api/app/models.py"
+    },
+    {
+      "class": "ReviewDecision",
+      "table": "review_decisions",
+      "file": "apps/api/app/models.py"
+    },
+    {
+      "class": "StoreAutomationConfig",
+      "table": "store_automation_configs",
+      "file": "apps/api/app/models.py"
+    },
+    {
+      "class": "AutomationSchedule",
+      "table": "automation_schedules",
+      "file": "apps/api/app/models.py"
+    },
+    {
+      "class": "AutomationRun",
+      "table": "automation_runs",
+      "file": "apps/api/app/models.py"
+    },
+    {
+      "class": "ImportIssue",
+      "table": "import_issues",
+      "file": "apps/api/app/models.py"
+    }
+  ]
+}
