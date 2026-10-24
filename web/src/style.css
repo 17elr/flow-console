@@ -17,6 +17,7 @@
   --muted: #64776d;
   --line: #e0e8e2;
 }
+.detail-fields { min-width: 0; margin: 0; padding: 0; border: 0; }
 * {
   box-sizing: border-box;
 }

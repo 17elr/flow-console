@@ -382,3 +382,28 @@ test("expired login preserves unsaved product values for the same user", async (
     "13.12345678",
   );
 });
+
+test("loading and failed product requests keep stale fields disabled", async ({page}) => {
+  const code=`LOADING-${suffix}`;
+  const created=await apiOperator.post('/api/products',{headers:{'X-CSRF-Token':operatorToken},data:{spu_code:code,title:'Synthetic loading fixture',currency:'USD',stock:0}});
+  expect(created.ok()).toBeTruthy();
+  await login(page,operatorName,'browser-password-123');
+  await expect(page.locator('.detail-title h2')).toHaveText('Synthetic loading fixture');
+  let release,entered=false;
+  const gate=new Promise(resolve=>{release=resolve});
+  await page.route(`**/api/products/${productId}/workflow`,async route=>{entered=true;await gate;await route.continue()});
+  await page.getByPlaceholder('搜索名称或货号').fill(`BROWSER-${suffix}`);
+  await page.getByRole('button',{name:new RegExp(`BROWSER-${suffix}`)}).click();
+  await expect.poll(()=>entered).toBeTruthy();
+  await expect(page.getByLabel('销售价格',{exact:true})).toBeDisabled();
+  release();
+  await expect(page.getByLabel('销售价格',{exact:true})).toBeEnabled();
+  await expect(page.getByLabel('销售价格',{exact:true})).toHaveValue('12.12345678');
+  await page.unroute(`**/api/products/${productId}/workflow`);
+  const other=(await created.json()).id;
+  await page.route(`**/api/products/${other}/workflow`,route=>route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({code:'FIXTURE_UNAVAILABLE',message:'合成验收：商品详情暂不可用'})}));
+  await page.getByPlaceholder('搜索名称或货号').fill(code);
+  await page.getByRole('button',{name:new RegExp(code)}).click();
+  await expect(page.getByRole('alert').filter({hasText:'合成验收：商品详情暂不可用'})).toBeVisible();
+  await expect(page.getByLabel('销售价格',{exact:true})).toBeDisabled();
+});

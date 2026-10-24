@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onUnmounted, ref, watch } from "vue";
+import { computed, nextTick, onUnmounted, ref, watch } from "vue";
 import { ElMessageBox } from "element-plus";
 import {
   Check,
@@ -25,7 +25,8 @@ const detail = ref(null),
   error = ref(""),
   fields = ref({}),
   busy = ref(false),
-  loading = ref(false);
+  loading = ref(false),
+  loadFailed = ref(false);
 const copies = ref({
     TEMU: { title: "", description: "", bullet_points: "" },
     ALIEXPRESS: { title: "", description: "", bullet_points: "" },
@@ -129,6 +130,7 @@ async function load(id = props.id, preserve = false) {
     ]);
     if (version !== sequence) return;
     detail.value = data?.product || null;
+    loadFailed.value = false;
     readiness.value = data?.blockers || [];
     stores.value = storeList;
     library.value = files;
@@ -154,9 +156,12 @@ async function load(id = props.id, preserve = false) {
       if (draft?.copies) copies.value = draft.copies;
     }
   } catch (e) {
-    if (e.name !== "AbortError" && version === sequence)
+    if (e.name !== "AbortError" && version === sequence) {
       error.value = e.message;
+      loadFailed.value = true;
+    }
   } finally {
+    await nextTick();
     if (version === sequence) loading.value = false;
   }
 }
@@ -404,6 +409,7 @@ async function archive() {
         name="compliance"
         :disabled="!id"
     /></el-tabs>
+    <fieldset :disabled="loading || loadFailed" class="detail-fields">
     <div v-if="tab === 'facts'" class="tab-content">
       <div class="section-heading">
         <div>
@@ -919,5 +925,6 @@ async function archive() {
         </div>
       </div>
     </div>
+    </fieldset>
   </section>
 </template>
