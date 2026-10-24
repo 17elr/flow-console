@@ -1,7 +1,5 @@
-name: CI
+name: Legacy manual regression
 on:
-  push:
-  pull_request:
   workflow_dispatch:
 permissions:
   contents: read

@@ -1,0 +1,23 @@
+{
+  "name": "flow-console-web",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 3000",
+    "build": "vite build",
+    "preview": "vite preview --host 127.0.0.1 --port 3000",
+    "test": "node --test tests/*.test.js",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "vue": "3.5.38",
+    "element-plus": "2.13.3",
+    "@element-plus/icons-vue": "2.3.2"
+  },
+  "devDependencies": {
+    "vite": "7.3.1",
+    "@vitejs/plugin-vue": "6.0.4",
+    "@playwright/test": "1.62.1"
+  }
+}

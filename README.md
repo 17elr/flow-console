@@ -1,138 +1,74 @@
 # Flow Console
 
-## 项目证据与个人贡献
+面向商品运营团队的上架工作台：资料导入、素材版本、英文文案、人工审核、后台任务与平台结果核验。
 
-[负责模块与关键技术决策](docs/PORTFOLIO.md) · [当前架构说明](docs/architecture-overview.md) · [持续集成](.github/workflows/ci.yml)
+**当前默认版本：Java / Vue 个人改造版（2026-10-24）。** 原 FastAPI / Next.js 版本保留在 `apps/`，作为历史实现和回退依据。改造不会追溯改变原项目的技术架构或历史工作量。
 
-```mermaid
-flowchart LR
-    U[Next.js / React 商品工作台] --> A[FastAPI / Pydantic]
-    A --> DB[(SQLite 默认 / PostgreSQL 可选)]
-    A --> I[SPU-SKU 导入与校验]
-    A --> P[图片处理 / OCR / 文案与审核]
-    P --> S[本地存储 / S3 / COS]
-    P -. 按需调用 .-> AI[兼容图片模型 API / 本地抠图模型]
-    A --> T[线程池默认 / Celery-Redis 可选]
-    T --> M[妙手平台适配 / 任务与外部 ID]
-    M --> TEMU[TEMU 发布与状态核验]
-    M --> AE[AliExpress 草稿 / 本地导入包]
-```
+![Workbench](docs/images/workbench-java.png)
 
-### 本地运行证据
-
-[真实 API 运行记录与复现方法](docs/demo-run.md) · [机器可读结果](docs/evidence/demo-run.json)
-
-![隔离演示数据下的 Flow Console 商品工作台](docs/images/workbench.png)
-
-本次使用合成测试商品和图片，实际运行本地 API；未调用收费模型或真实店铺接口。
-
-
-> 面向女士饰品电商运营的本地商品上架工作台
-
-Flow Console 把商品资料导入、SPU/SKU 校验、图片处理、英文文案审核、合规材料管理、店铺草稿创建和自动化运行记录放在同一套 Windows 工作流中。项目适合需要在本地控制商品数据、素材和平台发布证据的电商团队。
-
-![Architecture](https://img.shields.io/badge/architecture-local--first-2563eb)
-![Frontend](https://img.shields.io/badge/frontend-Next.js%2016%20%7C%20React%2019-111827)
-![Backend](https://img.shields.io/badge/backend-FastAPI%20%7C%20SQLAlchemy-059669)
-![License](https://img.shields.io/badge/license-private%20project-f59e0b)
-
-## 能做什么
-
-- 从 Excel、商品文件夹或妙手本地格式 2 导入商品资料和图片，匹配 SPU、SKU、套装组件与包装图。
-- 用确定性图片流水线处理白底图、尺寸图和场景图，保留输入版本、哈希、任务状态和质检结果。
-- 生成并审核 TEMU、AliExpress 平台英文标题、要点和描述；审核未通过时阻止草稿创建。
-- 管理 AliExpress 包装标签、REACH 报告和其他资质文件，支持图片 OCR、PDF/PPTX 文字提取与复用。
-- 通过妙手开放平台同步店铺并创建草稿；TEMU 支持草稿、认领、库存保存、发布和权威状态核验。
-- AliExpress 支持独立的公共采集箱草稿路径，以及明确标记为 `PACKAGE_READY` 的本地 ZIP 导入包。
-- 按时区配置批量自动化任务，记录每次运行、平台、商品、外部 ID 和错误信息。
-
-## 当前边界
-
-TEMU 发布链路已包含权威状态核验。AliExpress 当前只创建草稿或本地导入包，不自动发布；真实公共采集箱接口仍应使用受控商品验证。`PACKAGE_READY` 只代表生成了可下载文件，不代表线上已创建草稿。
+> 截图使用独立测试库中的合成商品及 HTTP 假平台，不代表真实店铺发布、生产吞吐或效率数据。
 
 ## 技术栈
 
-| 层级 | 技术 |
-| --- | --- |
-| Web | Next.js 16、React 19、TypeScript、Tailwind CSS 4、lucide-react |
-| API | FastAPI、Uvicorn、Pydantic、SQLAlchemy 2、Alembic |
-| 数据库 | SQLite（本地默认）、PostgreSQL（部署选项） |
-| 图片与 OCR | Pillow、OpenCV、NumPy、RapidOCR、rembg/BiRefNet |
-| 异步任务 | 本地线程池、Celery、Redis |
-| 文件与对象存储 | 本地镜像、S3 兼容存储、腾讯云 COS/CDN |
-| 文档与表格 | openpyxl、pypdf、ZIP/XML 标准库解析 |
-| 外部平台 | 妙手开放平台、TEMU、AliExpress、Hensun/OpenAI 兼容图片 API |
-| 质量保障 | pytest、API 契约测试、TypeScript/ESLint、Next.js build |
+| 部分 | 实际实现 |
+|---|---|
+| 核心业务 | Java 17、Spring Boot 3.5.16、Spring MVC、MyBatis 3.0.5、MySQL 8.0 |
+| 工作台 | Vue 3、Vite、Element Plus、JavaScript、原生 fetch |
+| 后台任务 | 同一 Java 产物的独立 worker、Spring AMQP、RabbitMQ、MySQL Outbox |
+| 账号限流 | Redis 原子 Lua，按实际平台 AppKey 共享配额 |
+| HTTP / 图片 | JDK HttpClient、Java ImageIO；可选 Python 算法适配器 |
+| 认证 | HttpSession、CSRF、数据库角色校验、BCrypt 密码哈希 |
+| 交付 | Maven、Docker Compose、GitHub Actions、JUnit / MockMvc / Playwright |
 
-## 架构概览
+依赖锁定在 `server/pom.xml` 与 `web/package-lock.json`。没有引入 JPA、Celery、Nacos、Seata 或 Kubernetes。
 
-```mermaid
-flowchart LR
-    UI[Next.js 工作台] --> API[FastAPI API]
-    API --> DB[(SQLite / PostgreSQL)]
-    API --> ASSET[本地镜像 / S3 / COS]
-    API --> IMG[图片与 OCR 流水线]
-    API --> TASK[本地任务 / Celery + Redis]
-    API --> ERP[妙手开放平台]
-    ERP --> TEMU[TEMU]
-    ERP --> AE[AliExpress 草稿或导入包]
+## 主要能力
+
+- Excel、成品图文件夹和 ZIP 导入；按 SPU 整体事务，返回出错行与错误项，重复导入复用业务编码。
+- 商品、SKU、套装组件、六张主图和独立 SKU 图；保留素材来源、版本、哈希及原上传字节。
+- Java 裁剪、缩放和真实尺寸图；Java 组织图像模型请求，可选内部 Python OCR / BiRefNet 组件。
+- 商品事实模板与人工编辑英文文案；人工审核绑定内容版本及稳定指纹，换图或修改关键资料后重审。
+- 异步任务唯一约束、持久化 Outbox、RabbitMQ 确认与手动 ACK、租约恢复、受控重试和账号共享限流。
+- TEMU 分阶段建稿、认领、库存保存、发布和权威状态核验；AliExpress 独立在线草稿契约及本地导入包。
+- 成员角色、店铺配置、合规文件、包装素材、每日计划、任务进度与操作审计。
+- SQLite 只读导出、独立 MySQL 导入、原 ID 映射、金额核对、素材哈希与历史外部结果保留。
+
+导入不会自动批准。`PACKAGE_READY`、`DRAFT_CREATED`、`VERIFYING` 和已确认发布分别显示。未知外部结果先核验，不能用“强制重试”重复创建商品。
+
+## 启动
+
+准备 Docker Compose v2，将 `.env.example` 复制为 **`.env.java`** 并设置独立强密码。无需覆盖旧 `.env`。
+
+```bash
+docker compose --env-file .env.java up -d --build
 ```
 
-## 快速开始
+Windows 也可运行 `安装环境.cmd`、`启动系统.cmd`。工作台位于 [127.0.0.1:3000](http://127.0.0.1:3000)，初始账号 `admin`，密码来自 `BOOTSTRAP_ADMIN_PASSWORD`。管理员再创建运营与审核成员。
 
-环境要求：Windows 10/11、PowerShell、Python 3.10+、Node.js 20+。首次安装：
+MySQL `13316`、Redis `16376`、RabbitMQ `15676` / 管理 `15677` 仅映射本机。停止使用 `docker compose --env-file .env.java stop`，保留数据卷。
 
-```powershell
-.\安装环境.cmd
-.\启动系统.cmd
+原生 Java / Node 开发、Linux 部署、HTTPS、启动排错见 [运行手册](docs/RUNBOOK.md)。
+
+## 验证
+
+```bash
+mvn -B -f server/pom.xml verify
+cd web && npm ci && npm test && npm run build
 ```
 
-默认地址：
+完整集成检查还需独立 MySQL / Redis / RabbitMQ，设置 `RUN_INTEGRATION=true`；测试只接受 `flow_test_*` 数据库。浏览器验收在集成测试准备的合成数据上运行。完整命令、实际结果和限制见 [验收记录](docs/VERIFICATION.md)。
 
-| 服务 | 地址 |
-| --- | --- |
-| 工作台 | http://localhost:3000 |
-| API | http://127.0.0.1:8000 |
-| Swagger | http://127.0.0.1:8000/docs |
-| 健康检查 | http://127.0.0.1:8000/health |
+## 边界
 
-开发者也可以运行 `scripts\start-dev.ps1` 和 `scripts\stop-dev.ps1`。环境变量模板位于 [`apps/api/.env.example`](./apps/api/.env.example)，真实密钥只放在本机 `.env`，不要提交。
+真实平台和收费图像模型默认关闭。启用前必须获得真实店铺或模型调用授权，并填写经核对的类目、属性、包装、SKU 与公开素材参数。HTTP 假平台测试不等于真实平台验收。
 
-## 文档导航
+AliExpress 不自动发布；没有完整在线契约时返回 409。普通成品图流程不依赖 Python。可选算法缺模型时明确不可用，不冒充 Java 已重写算法。文案目前是事实模板与人工编辑，未声明使用文本大模型。
 
-- [接口文档](./docs/API.md)：HTTP 路由、参数、状态和典型调用顺序。
-- [开发指南](./docs/DEVELOPMENT.md)：安装、环境变量、架构、迁移、测试和排错。
-- [项目交接](./PROJECT-HANDOFF.md)：业务目标、平台验证进度、已知问题和后续工作。
-- [模块验收记录](./MODULE-1-ACCEPTANCE.md)、[模块二](./MODULE-2-ACCEPTANCE.md)、[模块三至七](./MODULES-3-7-ACCEPTANCE.md)。
+## 文档
 
-## 项目结构
+- [架构与状态图](docs/ARCHITECTURE.md) · [API](docs/API-JAVA.md) · [数据字典](docs/DATA-DICTIONARY.md)
+- [迁移、校验与回退](docs/MIGRATION.md) · [逐项接口对照](docs/migration/API-MAP.md)
+- [界面设计](docs/DESIGN.md) · [实现与测试索引](docs/INTERVIEW.md)
+- [历史版本与原证据](docs/LEGACY.md)
 
-```text
-flow-console/
-├─ apps/api/                 FastAPI、模型、平台适配器、任务和测试
-├─ apps/web/                 Next.js 商品工作台
-├─ docs/                     开发与接口文档
-├─ scripts/                  启停、模板和维护脚本
-├─ docker-compose.yml        PostgreSQL、Redis、MinIO
-├─ PROJECT-HANDOFF.md        业务交接与验证边界
-└─ README.md
-```
-
-## 验证命令
-
-```powershell
-Set-Location apps/api
-& ..\..\.venv\Scripts\python.exe -m pytest -q
-& ..\..\.venv\Scripts\python.exe -m compileall app tests
-
-Set-Location ..\web
-npm run lint
-npm run build
-```
-
-## 安全与数据边界
-
-- `.env`、数据库、素材、日志、依赖目录和本地模型均不进入 Git。
-- 不虚构商品材质、尺寸、重量、认证或品牌信息；缺少必需数据时阻止草稿创建。
-- 异步请求被接受不等于发布成功，只有平台权威查询命中才记录为 `PUBLISHED`。
-- 本仓库是私有项目，未声明开源许可证。
+数据库、素材、模型、密钥、迁移原始数据和本地备份均不进入 Git。仓库未声明开源许可证。

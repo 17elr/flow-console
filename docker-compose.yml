@@ -1,51 +1,119 @@
+name: flow-console-java
 services:
-  postgres:
-    image: postgres:17-alpine
+  mysql:
+    image: mysql:8.0.44
     environment:
-      POSTGRES_DB: commerce
-      POSTGRES_USER: commerce
-      POSTGRES_PASSWORD: commerce_dev
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
+      MYSQL_DATABASE: flow_console
+      MYSQL_USER: flow
+      MYSQL_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env.java}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in .env.java}
+    ports: ["127.0.0.1:13316:3306"]
+    volumes: [flow_mysql:/var/lib/mysql]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U commerce -d commerce"]
+      test: [CMD-SHELL, 'mysqladmin ping -h 127.0.0.1 -u root -p"$$MYSQL_ROOT_PASSWORD" --silent']
       interval: 5s
       timeout: 5s
-      retries: 10
-
+      retries: 30
+    networks: [internal]
   redis:
-    image: redis:7-alpine
-    command: redis-server --appendonly yes
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
+    image: redis:7.4.11-alpine
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env.java}
+    command: [sh, -c, 'exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"']
+    ports: ["127.0.0.1:16376:6379"]
+    volumes: [flow_redis:/data]
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [CMD-SHELL, 'REDISCLI_AUTH="$$REDIS_PASSWORD" redis-cli ping']
       interval: 5s
       timeout: 3s
-      retries: 10
-
-  minio:
-    image: minio/minio:latest
-    command: server /data --console-address ":9001"
+      retries: 20
+    networks: [internal]
+  rabbitmq:
+    image: rabbitmq:4.3.7-management-alpine
     environment:
-      MINIO_ROOT_USER: commerce
-      MINIO_ROOT_PASSWORD: commerce_dev_123
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    volumes:
-      - minio_data:/data
+      RABBITMQ_DEFAULT_USER: flow
+      RABBITMQ_DEFAULT_PASS: ${RABBIT_PASSWORD:?Set RABBIT_PASSWORD in .env.java}
+    ports: ["127.0.0.1:15676:5672", "127.0.0.1:15677:15672"]
+    volumes: [flow_rabbit:/var/lib/rabbitmq]
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      test: [CMD, rabbitmq-diagnostics, -q, ping]
       interval: 5s
       timeout: 5s
-      retries: 10
-
+      retries: 30
+    networks: [internal]
+  api:
+    image: flow-console-java:2.0.0
+    build: {context: ., dockerfile: server/Dockerfile}
+    command: [--spring.profiles.active=api]
+    environment: &java-environment
+      BIND_ADDRESS: 0.0.0.0
+      DB_URL: jdbc:mysql://mysql:3306/flow_console?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true
+      DB_USER: flow
+      DB_PASSWORD: ${DB_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      RABBIT_HOST: rabbitmq
+      RABBIT_PORT: 5672
+      RABBIT_USER: flow
+      RABBIT_PASSWORD: ${RABBIT_PASSWORD}
+      ASSET_ROOT: /app/data/assets
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:?Set BOOTSTRAP_ADMIN_PASSWORD in .env.java}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      REAL_PUBLISHING_ENABLED: ${REAL_PUBLISHING_ENABLED:-false}
+      MIAOSHOU_BASE_URL: ${MIAOSHOU_BASE_URL:-https://openapi-erp.91miaoshou.com}
+      MIAOSHOU_APP_KEY: ${MIAOSHOU_APP_KEY:-}
+      MIAOSHOU_APP_SECRET: ${MIAOSHOU_APP_SECRET:-}
+      MIAOSHOU_ACCOUNT_KEY: ${MIAOSHOU_ACCOUNT_KEY:-default}
+      MIAOSHOU_PUBLIC_COLLECT_CREATE_PATH: ${MIAOSHOU_PUBLIC_COLLECT_CREATE_PATH:-}
+      MIAOSHOU_PUBLIC_COLLECT_QUERY_PATH: ${MIAOSHOU_PUBLIC_COLLECT_QUERY_PATH:-}
+      PUBLIC_ASSET_BASE_URL: ${PUBLIC_ASSET_BASE_URL:-}
+      PLATFORM_INTERVAL_MS: ${PLATFORM_INTERVAL_MS:-1200}
+      IMAGE_MODEL_ENABLED: ${IMAGE_MODEL_ENABLED:-false}
+      IMAGE_MODEL_URL: ${IMAGE_MODEL_URL:-}
+      IMAGE_MODEL_API_KEY: ${IMAGE_MODEL_API_KEY:-}
+      IMAGE_MODEL: ${IMAGE_MODEL:-}
+      COMPUTE_URL: ${COMPUTE_URL:-}
+      COMPUTE_TOKEN: ${COMPUTE_TOKEN:-}
+    ports: ["127.0.0.1:8000:8000"]
+    volumes: [flow_assets:/app/data/assets]
+    depends_on:
+      mysql: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      rabbitmq: {condition: service_healthy}
+    networks: [internal, egress]
+    restart: unless-stopped
+  worker:
+    image: flow-console-java:2.0.0
+    build: {context: ., dockerfile: server/Dockerfile}
+    command: [--spring.profiles.active=worker]
+    environment: *java-environment
+    volumes: [flow_assets:/app/data/assets]
+    depends_on:
+      mysql: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      rabbitmq: {condition: service_healthy}
+    networks: [internal, egress]
+    restart: unless-stopped
+  web:
+    build: {context: ., dockerfile: web/Dockerfile}
+    ports: ["127.0.0.1:3000:80"]
+    depends_on: [api]
+    networks: [internal]
+    restart: unless-stopped
+  compute:
+    profiles: [compute]
+    build: {context: ., dockerfile: compute-adapter/Dockerfile}
+    environment:
+      COMPUTE_TOKEN: ${COMPUTE_TOKEN:-}
+    volumes: [flow_compute:/compute/cache]
+    networks: [internal]
 volumes:
-  postgres_data:
-  redis_data:
-  minio_data:
+  flow_mysql:
+  flow_redis:
+  flow_rabbit:
+  flow_assets:
+  flow_compute:
+networks:
+  internal: {internal: true}
+  egress:
